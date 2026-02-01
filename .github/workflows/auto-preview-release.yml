@@ -54,7 +54,8 @@ jobs:
           B=$(echo $VERSION | cut -d. -f2)
           C=$(echo $VERSION | cut -d. -f3)
           C_NEW=$((C + 1))
-          NEW_VERSION="${A}.${B}.${C_NEW}.${{ steps.commit_sha.outputs.SHORT_SHA }}"
+          A2=((A + 16))
+          NEW_VERSION="${A2}.${B}.${C_NEW}.${{ steps.commit_sha.outputs.SHORT_SHA }}"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "Generated Version: $NEW_VERSION"
 
@@ -71,7 +72,7 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew assembleOnlinePreviewRelease assembleOfflinePreviewRelease -PVERSION_NAME="${{ env.NEW_VERSION }}"
+        run: ./gradlew assembleOnlinePreviewRelease assembleOfflinePreviewRelease -PAPP_ID=com.android.packageinstaller -PVERSION_NAME="${{ env.NEW_VERSION }}"
 
       - name: Find and Rename Preview APKs
         id: rename_apks
