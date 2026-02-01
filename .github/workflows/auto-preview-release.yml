@@ -54,7 +54,7 @@ jobs:
           B=$(echo $VERSION | cut -d. -f2)
           C=$(echo $VERSION | cut -d. -f3)
           C_NEW=$((C + 1))
-          A2=((A + 16))
+          A2=$((A + 16))
           NEW_VERSION="${A2}.${B}.${C_NEW}.${{ steps.commit_sha.outputs.SHORT_SHA }}"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "Generated Version: $NEW_VERSION"
