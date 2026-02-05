@@ -51,7 +51,7 @@ jobs:
         run: |
           VERSION=$(./gradlew -q properties | grep '^BASE_VERSION:' | awk '{print $2}')
           EXTRA=17000000
-          VERSION="${EXTRA}"
+          VERSION=$((VERSION + EXTRA))
           A=$(echo $VERSION | cut -d. -f1)
           B=$(echo $VERSION | cut -d. -f2)
           C=$(echo $VERSION | cut -d. -f3)
