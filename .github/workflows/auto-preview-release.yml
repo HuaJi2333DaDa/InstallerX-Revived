@@ -49,7 +49,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(./gradlew -q properties | grep '^BASE_VERSION:' | awk '（{print $2} + 16000000）')
+          VERSION=$(./gradlew -q properties | grep '^BASE_VERSION:' | awk '({print $2} + 16000000)')
           A=$(echo $VERSION | cut -d. -f1)
           B=$(echo $VERSION | cut -d. -f2)
           C=$(echo $VERSION | cut -d. -f3)
