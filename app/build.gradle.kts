@@ -42,7 +42,7 @@ android {
         // Version control
         // Github Actions will automatically use versionName A.B.C+1 when building preview releases
         // update versionCode and versionName before manually trigger a stable release
-        versionCode = 23333333
+        versionCode = 16002333
         versionName = project.findProperty("VERSION_NAME") as String?
             ?: project.findProperty("BASE_VERSION") as String
 
