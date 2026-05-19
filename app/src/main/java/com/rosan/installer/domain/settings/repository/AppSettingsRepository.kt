@@ -27,7 +27,7 @@ enum class IntSetting {
     ThemeSeedColor,
     ShowMiIslandBlockingInterval,
     NotificationSuccessAutoClearSeconds,
-    DialogAutoCloseCountdown,
+    CloseSessionCountdown,
     UninstallFlags
 }
 
@@ -69,6 +69,8 @@ enum class BooleanSetting {
     LabShowFilePath,
     LabShowInstallInitiator,
     LabInstallWithoutUserAction,
+    DetectXposedModule,
+    QuickOpenLSPosed,
     EnableFileLogging,
     UserSetLSPosedActive
 }

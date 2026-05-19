@@ -195,6 +195,24 @@ fun DialogSettingsPage(
                 }
             }
 
+            item {
+                SegmentedColumn(
+                    title = stringResource(R.string.extras)
+                ) {
+                    item {
+                        SwitchWidget(
+                            icon = AppIcons.Share,
+                            title = stringResource(R.string.lab_tap_icon_to_share),
+                            description = stringResource(R.string.lab_tap_icon_to_share_desc),
+                            checked = uiState.tapIconToShare,
+                            onCheckedChange = {
+                                viewModel.dispatch(DialogSettingsAction.ChangeTapIconToShare(it))
+                            }
+                        )
+                    }
+                }
+            }
+
             item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }

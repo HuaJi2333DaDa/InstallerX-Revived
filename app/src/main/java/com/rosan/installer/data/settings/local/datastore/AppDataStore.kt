@@ -87,7 +87,7 @@ class AppDataStore(
             booleanPreferencesKey("show_dialog_version_compare_single_line")
         val DIALOG_SDK_COMPARE_MULTI_LINE =
             booleanPreferencesKey("show_dialog_sdk_compare_multi_line")
-        val DIALOG_AUTO_CLOSE_COUNTDOWN =
+        val CLOSE_SESSION_COUNTDOWN =
             intPreferencesKey("show_dhizuku_auto_close_count_down_menu")
         val DIALOG_SHOW_EXTENDED_MENU =
             booleanPreferencesKey("show_dialog_install_extended_menu")
@@ -99,6 +99,10 @@ class AppDataStore(
             booleanPreferencesKey("show_oppo_special")
         val DIALOG_AUTO_SILENT_INSTALL =
             booleanPreferencesKey("auto_silent_install")
+        val DETECT_XPOSED_MODULE =
+            booleanPreferencesKey("detect_xposed_module")
+        val QUICK_OPEN_LSPOSED =
+            booleanPreferencesKey("quick_open_lsposed")
 
         // Customize Installer
         val MANAGED_INSTALLER_PACKAGES_LIST =

@@ -8,6 +8,7 @@ import com.rosan.installer.domain.settings.model.InstallMode
 import com.rosan.installer.domain.settings.model.InstallReason
 import com.rosan.installer.domain.settings.model.InstallerMode
 import com.rosan.installer.domain.settings.model.PackageSource
+import com.rosan.installer.domain.settings.model.ToastMode
 
 sealed interface EditViewAction {
     data class ChangeDataName(val name: String) : EditViewAction
@@ -15,7 +16,7 @@ sealed interface EditViewAction {
     data class ChangeDataAuthorizer(val authorizer: Authorizer) : EditViewAction
     data class ChangeDataCustomizeAuthorizer(val customizeAuthorizer: String) : EditViewAction
     data class ChangeDataInstallMode(val installMode: InstallMode) : EditViewAction
-    data class ChangeDataShowToast(val showToast: Boolean) : EditViewAction
+    data class ChangeDataToastMode(val toastMode: ToastMode) : EditViewAction
     data class ChangeDataEnableCustomizePackageSource(val enable: Boolean) : EditViewAction
     data class ChangeDataPackageSource(val packageSource: PackageSource) : EditViewAction
     data class ChangeDataEnableCustomizeInstallReason(val enable: Boolean) : EditViewAction
@@ -37,6 +38,8 @@ sealed interface EditViewAction {
     data class ChangeDataAllowTestOnly(val allowTestOnly: Boolean) : EditViewAction
     data class ChangeDataAllowDowngrade(val allowDowngrade: Boolean) : EditViewAction
     data class ChangeDataBypassLowTargetSdk(val bypassLowTargetSdk: Boolean) : EditViewAction
+    data class ChangeDataAllowSigMismatch(val allowSigMismatch: Boolean) : EditViewAction
+    data class ChangeDataAllowSigUnknown(val allowSigUnknown: Boolean) : EditViewAction
     data class ChangeDataAllowAllRequestedPermissions(val allowAllRequestedPermissions: Boolean) : EditViewAction
     data class ChangeDataRequestUpdateOwnership(val requestUpdateOwnership: Boolean) : EditViewAction
     data class ChangeSplitChooseAll(val splitChooseAll: Boolean) : EditViewAction

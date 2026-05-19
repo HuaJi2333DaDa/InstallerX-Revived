@@ -22,12 +22,13 @@ import com.rosan.installer.data.settings.local.room.entity.converter.InstallMode
 import com.rosan.installer.data.settings.local.room.entity.converter.InstallReasonConverter
 import com.rosan.installer.data.settings.local.room.entity.converter.InstallerModeConverter
 import com.rosan.installer.data.settings.local.room.entity.converter.PackageSourceConverter
+import com.rosan.installer.data.settings.local.room.entity.converter.ToastModeConverter
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 
 @Database(
     entities = [AppEntity::class, ConfigEntity::class],
-    version = 14,
+    version = 15,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 3, to = 4),
@@ -40,6 +41,7 @@ import org.koin.core.component.get
         AutoMigration(from = 10, to = 11),
         AutoMigration(from = 11, to = 12),
         AutoMigration(from = 13, to = 14),
+        AutoMigration(from = 14, to = 15),
     ]
 )
 @TypeConverters(
@@ -48,7 +50,8 @@ import org.koin.core.component.get
     InstallerModeConverter::class,
     DexoptModeConverter::class,
     PackageSourceConverter::class,
-    InstallReasonConverter::class
+    InstallReasonConverter::class,
+    ToastModeConverter::class
 )
 abstract class InstallerRoom : RoomDatabase() {
     companion object : KoinComponent {

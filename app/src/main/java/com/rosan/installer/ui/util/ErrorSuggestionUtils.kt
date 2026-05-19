@@ -20,6 +20,7 @@ import com.rosan.installer.domain.device.model.Manufacturer
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.engine.model.InstallErrorType
 import com.rosan.installer.domain.engine.model.InstallOption
+import com.rosan.installer.domain.privileged.model.PrivilegedErrorType
 import com.rosan.installer.domain.settings.model.Authorizer
 import com.rosan.installer.domain.settings.model.InstallerMode
 import com.rosan.installer.ui.icons.AppIcons
@@ -246,6 +247,20 @@ fun rememberErrorSuggestions(
                 )
             }
 
+            if (error.hasErrorType(InstallErrorType.BLOCKED_BY_PROFILE)) {
+                add(
+                    ErrorSuggestion(
+                        labelRes = R.string.install_anyway,
+                        descriptionRes = R.string.suggestion_install_anyway_desc,
+                        icon = AppIcons.InstallMode,
+                        onClick = {
+                            viewModel.updateConfig { it.copy(bypassProfileRestriction = true) }
+                            viewModel.dispatch(InstallerViewAction.Install(false))
+                        }
+                    )
+                )
+            }
+
             val isNoneSystemAppMode = config.authorizer == Authorizer.None && !capabilityProvider.isSystemApp
             if (error.hasErrorType(InstallErrorType.MISSING_INSTALL_PERMISSION) && isNoneSystemAppMode) {
                 add(
@@ -257,6 +272,16 @@ fun rememberErrorSuggestions(
                     )
                 )
             }
+
+            if (error.hasErrorType(PrivilegedErrorType.DHIZUKU_NOT_WORK))
+                add(
+                    ErrorSuggestion(
+                        labelRes = R.string.retry,
+                        descriptionRes = R.string.suggestion_retry_install_desc,
+                        icon = AppIcons.Retry,
+                        onClick = { viewModel.dispatch(InstallerViewAction.Install(false)) }
+                    )
+                )
         }
     }
 }
