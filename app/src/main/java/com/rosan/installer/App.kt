@@ -5,11 +5,9 @@ import android.os.Build
 import com.kieronquinn.monetcompat.core.MonetCompat
 import com.rosan.installer.core.crash.CrashHandler
 import com.rosan.installer.core.env.AppConfig
-import com.rosan.installer.framework.service.AutoLockService
 import com.rosan.installer.di.init.appModules
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
-import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import timber.log.Timber
@@ -29,11 +27,10 @@ class App : Application() {
         }
 
         if (AppConfig.isLogEnabled) Timber.plant(object : Timber.DebugTree() {
-            override fun createStackElementTag(element: StackTraceElement): String? {
-                return super.createStackElementTag(element)
+            override fun createStackElementTag(element: StackTraceElement) =
+                super.createStackElementTag(element)
                     ?.substringBefore('$')
                     ?.take(23)
-            }
         })
 
         startKoin {
@@ -44,9 +41,5 @@ class App : Application() {
             // use modules
             modules(appModules)
         }
-
-        // Initialize Shizuku module
-        val autoLockService: AutoLockService = GlobalContext.get().get()
-        autoLockService.init()
     }
 }

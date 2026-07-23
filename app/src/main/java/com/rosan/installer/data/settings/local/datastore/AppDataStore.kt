@@ -98,9 +98,6 @@ class AppDataStore(
         val NOTIFICATION_SUCCESS_AUTO_CLEAR_SECONDS =
             register(intPreferencesKey("notification_success_auto_clear_seconds"), PreferenceValueType.INT)
 
-        // Auto Lock Installer
-        val AUTO_LOCK_INSTALLER = register(booleanPreferencesKey("auto_lock_installer"), PreferenceValueType.BOOLEAN)
-
         // ConfigUtil
         val AUTHORIZER = register(stringPreferencesKey("authorizer"), PreferenceValueType.STRING)
         val CUSTOMIZE_AUTHORIZER = register(stringPreferencesKey("customize_authorizer"), PreferenceValueType.STRING)
@@ -116,6 +113,8 @@ class AppDataStore(
         val APPLY_SHOW_PACKAGE_NAME = register(booleanPreferencesKey("apply_show_package_name"), PreferenceValueType.BOOLEAN)
 
         // InstallerViewModel
+        val DIALOG_HIDE_IDENTICAL_COMPARISONS =
+            register(booleanPreferencesKey("hide_identical_install_comparisons"), PreferenceValueType.BOOLEAN)
         val DIALOG_VERSION_COMPARE_SINGLE_LINE =
             register(booleanPreferencesKey("show_dialog_version_compare_single_line"), PreferenceValueType.BOOLEAN)
         val DIALOG_SDK_COMPARE_MULTI_LINE =
@@ -124,6 +123,8 @@ class AppDataStore(
             register(intPreferencesKey("show_dhizuku_auto_close_count_down_menu"), PreferenceValueType.INT)
         val DIALOG_SHOW_EXTENDED_MENU =
             register(booleanPreferencesKey("show_dialog_install_extended_menu"), PreferenceValueType.BOOLEAN)
+        val DIALOG_EXPAND_TEMPORARY_SETTINGS_BY_DEFAULT =
+            register(booleanPreferencesKey("expand_dialog_temporary_settings_by_default"), PreferenceValueType.BOOLEAN)
         val DIALOG_SHOW_INTELLIGENT_SUGGESTION =
             register(booleanPreferencesKey("show_dialog_install_intelligent_suggestion"), PreferenceValueType.BOOLEAN)
         val DIALOG_DISABLE_NOTIFICATION_ON_DISMISS =
