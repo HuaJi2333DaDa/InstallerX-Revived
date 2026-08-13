@@ -36,7 +36,8 @@ android {
         applicationId = project.findProperty("APP_ID") as String? ?: "com.miui.packageinstaller"
 
         // Version control retrieved from git, with a build-plugin fallback when git is unavailable.
-        versionCode = ("project.getGitCommitCount()" + 23336666)
+        val baseVersionCode = 23336666
+        versionCode = baseVersionCode + project.getGitCommitCount()
         versionName = project.getBaseVersionName()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
