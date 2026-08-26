@@ -8,9 +8,10 @@ data class PreferredViewState(
     val adbVerifyEnabled: Boolean = true,
     val isIgnoringBatteryOptimizations: Boolean = false,
     val showLauncherIcon: Boolean = true,
+    val allowInternetAccess: Boolean = true,
     val hasUpdate: Boolean = false,
     val remoteVersion: String = "",
-    val backupBusy: Boolean = false
+    val backupBusy: Boolean = false,
 ) {
     val authorizerCustomize = authorizer == Authorizer.Customize
 }

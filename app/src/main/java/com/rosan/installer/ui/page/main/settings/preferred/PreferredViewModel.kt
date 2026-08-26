@@ -11,11 +11,16 @@ import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.provider.PrivilegedProvider
 import com.rosan.installer.domain.settings.provider.SystemEnvProvider
 import com.rosan.installer.domain.settings.repository.AppSettingsRepository
+import com.rosan.installer.domain.settings.repository.BooleanSetting
 import com.rosan.installer.domain.settings.usecase.backup.ExportBackupUseCase
 import com.rosan.installer.domain.settings.usecase.backup.PrepareBackupRestoreUseCase
 import com.rosan.installer.domain.settings.usecase.backup.RestoreBackupUseCase
 import com.rosan.installer.domain.settings.usecase.settings.SetLauncherIconUseCase
+import com.rosan.installer.domain.settings.usecase.settings.UpdateSettingUseCase
 import com.rosan.installer.domain.updater.repository.UpdateRepository
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,9 +32,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class PreferredViewModel(
     appSettingsRepo: AppSettingsRepository,
@@ -37,15 +39,16 @@ class PreferredViewModel(
     private val systemEnvProvider: SystemEnvProvider,
     private val privilegedProvider: PrivilegedProvider,
     private val setLauncherIcon: SetLauncherIconUseCase,
+    private val updateSetting: UpdateSettingUseCase,
     private val exportBackup: ExportBackupUseCase,
     private val prepareBackupRestore: PrepareBackupRestoreUseCase,
-    private val restoreBackup: RestoreBackupUseCase
+    private val restoreBackup: RestoreBackupUseCase,
 ) : ViewModel() {
 
     private val _uiEvents = MutableSharedFlow<PreferredViewEvent>(
         replay = 0,
         extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     val uiEvents = _uiEvents.asSharedFlow()
 
@@ -59,7 +62,7 @@ class PreferredViewModel(
         adbVerifyEnabledFlow,
         isIgnoringBatteryOptFlow,
         updateRepo.updateInfoFlow,
-        backupBusyFlow
+        backupBusyFlow,
     ) { prefs, adbVerify, batteryOpt, updateInfo, backupBusy ->
         val customizeAuthorizer = if (prefs.authorizer == Authorizer.Customize) prefs.customizeAuthorizer else ""
 
@@ -69,14 +72,15 @@ class PreferredViewModel(
             showLauncherIcon = prefs.showLauncherIcon,
             adbVerifyEnabled = adbVerify,
             isIgnoringBatteryOptimizations = batteryOpt,
+            allowInternetAccess = prefs.allowInternetAccess,
             hasUpdate = prefs.allowInternetAccess && (updateInfo?.hasUpdate ?: false),
             remoteVersion = if (prefs.allowInternetAccess) updateInfo?.remoteVersion.orEmpty() else "",
-            backupBusy = backupBusy
+            backupBusy = backupBusy,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = PreferredViewState()
+        initialValue = PreferredViewState(),
     )
 
     init {
@@ -87,15 +91,26 @@ class PreferredViewModel(
 
     fun dispatch(action: PreferredViewAction) {
         when (action) {
+            is PreferredViewAction.ChangeInternetAccess -> viewModelScope.launch {
+                updateSetting(BooleanSetting.AllowInternetAccess, action.enabled)
+            }
+
             is PreferredViewAction.SetAdbVerifyEnabledState -> setAdbVerifyEnabled(action.enabled, action)
+
             is PreferredViewAction.RequestIgnoreBatteryOptimization -> requestIgnoreBatteryOptimization()
+
             is PreferredViewAction.RefreshIgnoreBatteryOptimizationStatus -> refreshIgnoreBatteryOptStatus()
+
             is PreferredViewAction.ChangeShowLauncherIcon -> viewModelScope.launch {
                 setLauncherIcon(action.showLauncherIcon)
             }
+
             is PreferredViewAction.SetDefaultInstaller -> setDefaultInstaller(action.lock, action)
+
             is PreferredViewAction.RequestExportBackup -> requestExportBackup()
+
             is PreferredViewAction.PrepareRestoreBackup -> prepareRestoreBackup(action.rawJson)
+
             PreferredViewAction.ConfirmRestoreBackup -> confirmRestoreBackup()
         }
     }
@@ -120,7 +135,9 @@ class PreferredViewModel(
             adbVerifyEnabledFlow.value = enabled
         }.onFailure { e ->
             Timber.e(e, "Failed to set ADB install verification to $enabled")
-            _uiEvents.emit(PreferredViewEvent.ShowDefaultInstallerErrorDetail(R.string.disable_adb_install_verify_failed, e, action))
+            _uiEvents.emit(
+                PreferredViewEvent.ShowDefaultInstallerErrorDetail(R.string.disable_adb_install_verify_failed, e, action),
+            )
         }
     }
 
@@ -139,7 +156,7 @@ class PreferredViewModel(
             privilegedProvider.setDefaultInstaller(
                 state.value.authorizer,
                 state.value.customizeAuthorizer,
-                lock
+                lock,
             )
         }.onSuccess {
             val successResId = if (lock) R.string.lock_default_installer_success else R.string.unlock_default_installer_success
@@ -158,7 +175,7 @@ class PreferredViewModel(
             runCatching {
                 PreferredViewEvent.LaunchBackupExport(
                     fileName = buildBackupFileName(),
-                    content = exportBackup()
+                    content = exportBackup(),
                 )
             }.onSuccess { event ->
                 _uiEvents.emit(event)

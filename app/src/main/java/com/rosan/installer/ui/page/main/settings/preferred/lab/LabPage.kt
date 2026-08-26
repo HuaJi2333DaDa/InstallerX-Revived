@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -51,15 +49,11 @@ import com.rosan.installer.core.env.AppConfig
 import com.rosan.installer.domain.device.model.ShizukuMode
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.settings.model.config.Authorizer
-import com.rosan.installer.domain.settings.model.preferences.GithubUpdateChannel
-import com.rosan.installer.domain.settings.model.preferences.HttpProfile
 import com.rosan.installer.domain.settings.model.preferences.RootMode
 import com.rosan.installer.domain.settings.model.preferences.SmartAuthorizerCandidate
 import com.rosan.installer.ui.icons.AppIcons
 import com.rosan.installer.ui.navigation.LocalNavigator
 import com.rosan.installer.ui.page.main.widget.card.InfoTipCard
-import com.rosan.installer.ui.page.main.widget.dialog.CustomGithubProxyUrlDialog
-import com.rosan.installer.ui.page.main.widget.dialog.GithubUpdateChannelSelectionDialog
 import com.rosan.installer.ui.page.main.widget.dialog.RootImplementationSelectionDialog
 import com.rosan.installer.ui.page.main.widget.setting.BaseWidget
 import com.rosan.installer.ui.page.main.widget.setting.DraggableList
@@ -78,10 +72,7 @@ import top.yukonga.miuix.kmp.nav.gesture.WindowNavigationEventBridge
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun LabPage(
-    useBlur: Boolean,
-    viewModel: LabSettingsViewModel = koinViewModel()
-) {
+fun LabPage(useBlur: Boolean, viewModel: LabSettingsViewModel = koinViewModel()) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -95,45 +86,7 @@ fun LabPage(
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
     val showRootImplementationDialog = remember { mutableStateOf(false) }
-    val showChannelDialog = remember { mutableStateOf(false) }
-    val showCustomProxyDialog = remember { mutableStateOf(false) }
     val showSmartAuthorizerSheet = remember { mutableStateOf(false) }
-
-    if (showChannelDialog.value)
-        GithubUpdateChannelSelectionDialog(
-            currentSelection = uiState.githubUpdateChannel,
-            onDismiss = { showChannelDialog.value = false },
-            onConfirm = { channel ->
-                showChannelDialog.value = false
-                viewModel.dispatch(LabSettingsAction.LabChangeGithubUpdateChannel(channel))
-                if (channel == GithubUpdateChannel.CUSTOM)
-                    showCustomProxyDialog.value = true
-            }
-        )
-
-    if (showCustomProxyDialog.value)
-        CustomGithubProxyUrlDialog(
-            initialUrl = uiState.customGithubProxyUrl,
-            onDismiss = {
-                showCustomProxyDialog.value = false
-                if (uiState.customGithubProxyUrl.isEmpty())
-                    viewModel.dispatch(
-                        LabSettingsAction.LabChangeGithubUpdateChannel(
-                            GithubUpdateChannel.OFFICIAL
-                        )
-                    )
-            },
-            onConfirm = { url ->
-                showCustomProxyDialog.value = false
-                viewModel.dispatch(LabSettingsAction.LabChangeCustomGithubProxyUrl(url))
-                if (url.isEmpty())
-                    viewModel.dispatch(
-                        LabSettingsAction.LabChangeGithubUpdateChannel(
-                            GithubUpdateChannel.OFFICIAL
-                        )
-                    )
-            }
-        )
 
     if (showRootImplementationDialog.value) {
         RootImplementationSelectionDialog(
@@ -144,12 +97,12 @@ fun LabPage(
                 // 1. Save the selected implementation
                 viewModel.dispatch(
                     LabSettingsAction.LabChangeRootImplementation(
-                        selectedImplementation
-                    )
+                        selectedImplementation,
+                    ),
                 )
                 // 2. Enable the flash module feature
                 viewModel.dispatch(LabSettingsAction.LabChangeRootModuleFlash(true))
-            }
+            },
         )
     }
 
@@ -183,21 +136,21 @@ fun LabPage(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backdrop.getMaterial3AppBarColor(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    scrolledContainerColor = backdrop.getMaterial3AppBarColor()
-                )
+                    scrolledContainerColor = backdrop.getMaterial3AppBarColor(),
+                ),
             )
-        }
+        },
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
-            contentPadding = paddingValues
+            contentPadding = paddingValues,
         ) {
             item { InfoTipCard(text = stringResource(R.string.lab_tip)) }
             item {
                 SegmentedColumn(
-                    title = stringResource(R.string.config_authorizer)
+                    title = stringResource(R.string.config_authorizer),
                 ) {
                     item {
                         SwitchWidget(
@@ -207,9 +160,9 @@ fun LabPage(
                             checked = uiState.tryMultipleAuthorizersOnInstall,
                             onCheckedChange = {
                                 viewModel.dispatch(
-                                    LabSettingsAction.LabChangeTryMultipleAuthorizersOnInstall(it)
+                                    LabSettingsAction.LabChangeTryMultipleAuthorizersOnInstall(it),
                                 )
-                            }
+                            },
                         )
                     }
                     item(animatedVisibility = uiState.tryMultipleAuthorizersOnInstall) {
@@ -218,19 +171,19 @@ fun LabPage(
                             title = stringResource(R.string.config_smart_authorizer_fallback_list),
                             description = stringResource(
                                 R.string.config_smart_authorizer_fallback_list_desc,
-                                smartAuthorizerSummary
+                                smartAuthorizerSummary,
                             ),
                             onClick = {
                                 capabilityProvider.refreshPrivilegeStatus()
                                 showSmartAuthorizerSheet.value = true
-                            }
+                            },
                         ) {}
                     }
                 }
             }
             item {
                 SegmentedColumn(
-                    title = stringResource(R.string.config_authorizer_root)
+                    title = stringResource(R.string.config_authorizer_root),
                 ) {
                     item {
                         SwitchWidget(
@@ -244,11 +197,11 @@ fun LabPage(
                                 } else {
                                     viewModel.dispatch(
                                         LabSettingsAction.LabChangeRootModuleFlash(
-                                            false
-                                        )
+                                            false,
+                                        ),
                                     )
                                 }
-                            }
+                            },
                         )
                     }
                     item(animatedVisibility = uiState.labRootEnableModuleFlash) {
@@ -262,7 +215,7 @@ fun LabPage(
                             checked = uiState.labRootShowModuleArt,
                             onCheckedChange = {
                                 viewModel.dispatch(LabSettingsAction.LabChangeRootShowModuleArt(it))
-                            }
+                            },
                         )
                     }
                 }
@@ -270,7 +223,7 @@ fun LabPage(
             if (AppConfig.isRespectPlatformInstallPolicyAvailable) {
                 item {
                     SegmentedColumn(
-                        title = stringResource(R.string.lab_unstable_features)
+                        title = stringResource(R.string.lab_unstable_features),
                     ) {
                         item {
                             SwitchWidget(
@@ -280,57 +233,10 @@ fun LabPage(
                                 checked = uiState.labRespectPlatformInstallPolicy,
                                 onCheckedChange = {
                                     viewModel.dispatch(
-                                        LabSettingsAction.LabChangeRespectPlatformInstallPolicy(it)
+                                        LabSettingsAction.LabChangeRespectPlatformInstallPolicy(it),
                                     )
-                                }
+                                },
                             )
-                        }
-                    }
-                }
-            }
-
-            item {
-                SegmentedColumn(
-                    title = stringResource(R.string.network_access)
-                ) {
-                    item {
-                        SwitchWidget(
-                            iconPlaceholder = false,
-                            title = stringResource(R.string.allow_internet_access),
-                            description = stringResource(R.string.allow_internet_access_desc),
-                            checked = uiState.allowInternetAccess,
-                            onCheckedChange = {
-                                viewModel.dispatch(LabSettingsAction.LabChangeInternetAccess(it))
-                            }
-                        )
-                    }
-                    if (uiState.allowInternetAccess) {
-                        /*item {
-                            SwitchWidget(
-                                icon = Icons.Default.Download,
-                                title = stringResource(R.string.lab_http_save_file),
-                                description = stringResource(R.string.lab_http_save_file_desc),
-                                checked = uiState.labHttpSaveFile,
-                                isM3E = false,
-                                onCheckedChange = { viewModel.dispatch(LabSettingsAction.LabChangeHttpSaveFile(it)) }
-                            )
-                        }*/
-                        item { LabHttpProfileWidget(viewModel) }
-
-                        val currentChannel = uiState.githubUpdateChannel
-                        item {
-                            val channelSummary = when (currentChannel) {
-                                GithubUpdateChannel.OFFICIAL -> stringResource(R.string.lab_update_github_proxy_official)
-                                GithubUpdateChannel.PROXY_7ED -> stringResource(R.string.lab_update_github_proxy_7ed)
-                                GithubUpdateChannel.CUSTOM -> uiState.customGithubProxyUrl.ifBlank {
-                                    stringResource(R.string.lab_update_github_proxy_custom)
-                                }
-                            }
-                            BaseWidget(
-                                title = stringResource(R.string.lab_update_github_proxy),
-                                description = channelSummary,
-                                onClick = { showChannelDialog.value = true }
-                            ) {}
                         }
                     }
                 }
@@ -340,7 +246,7 @@ fun LabPage(
 
     if (showSmartAuthorizerSheet.value) {
         ModalBottomSheet(
-            onDismissRequest = { showSmartAuthorizerSheet.value = false }
+            onDismissRequest = { showSmartAuthorizerSheet.value = false },
         ) {
             WindowNavigationEventBridge()
             SmartAuthorizerBottomSheet(
@@ -353,7 +259,7 @@ fun LabPage(
                 isSystemApp = isSystemApp,
                 onCandidatesChange = {
                     viewModel.dispatch(LabSettingsAction.LabChangeSmartAuthorizerCandidates(it))
-                }
+                },
             )
         }
     }
@@ -368,7 +274,7 @@ private fun SmartAuthorizerBottomSheet(
     dhizukuAvailable: Boolean,
     dhizukuAuthorized: Boolean,
     isSystemApp: Boolean,
-    onCandidatesChange: (List<SmartAuthorizerCandidate>) -> Unit
+    onCandidatesChange: (List<SmartAuthorizerCandidate>) -> Unit,
 ) {
     val context = LocalContext.current
     var sheetCandidates by remember { mutableStateOf(candidates) }
@@ -397,16 +303,16 @@ private fun SmartAuthorizerBottomSheet(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text = stringResource(R.string.config_try_multiple_authorizers_on_install),
             modifier = Modifier.align(Alignment.CenterHorizontally),
-            style = MaterialTheme.typography.headlineSmall
+            style = MaterialTheme.typography.headlineSmall,
         )
         InfoTipCard(
             text = stringResource(R.string.config_smart_authorizer_fallback_list_tip),
-            noPadding = true
+            noPadding = true,
         )
         DraggableList(
             items = sheetCandidates,
@@ -423,7 +329,7 @@ private fun SmartAuthorizerBottomSheet(
                     dhizukuAvailable = dhizukuAvailable,
                     dhizukuAuthorized = dhizukuAuthorized,
                     isSystemApp = isSystemApp,
-                    getString = context::getString
+                    getString = context::getString,
                 )
             },
             itemLeadingIcon = { smartAuthorizerIcon(it.authorizer) },
@@ -440,37 +346,34 @@ private fun SmartAuthorizerBottomSheet(
                     onCheckedChange = { checked ->
                         toggleCandidate(candidate, checked)
                     },
-                    modifier = Modifier.clearAndSetSemantics {}
+                    modifier = Modifier.clearAndSetSemantics {},
                 )
-            }
+            },
         )
         Spacer(Modifier.navigationBarsPadding())
     }
 }
 
-private fun smartAuthorizerDisplayName(
-    authorizer: Authorizer,
-    isSystemApp: Boolean,
-    getString: (Int) -> String
-): String =
-    if (authorizer == Authorizer.None) {
-        getString(
-            if (isSystemApp) R.string.working_status_system_installer
-            else R.string.config_authorizer_none
-        )
-    } else {
-        getString(authorizer.displayNameRes)
-    }
+private fun smartAuthorizerDisplayName(authorizer: Authorizer, isSystemApp: Boolean, getString: (Int) -> String): String = if (authorizer == Authorizer.None) {
+    getString(
+        if (isSystemApp) {
+            R.string.working_status_system_installer
+        } else {
+            R.string.config_authorizer_none
+        },
+    )
+} else {
+    getString(authorizer.displayNameRes)
+}
 
 @Composable
-private fun smartAuthorizerIcon(authorizer: Authorizer): ImageVector =
-    when (authorizer) {
-        Authorizer.None -> AppIcons.None
-        Authorizer.Root -> AppIcons.Root
-        Authorizer.Shizuku -> ImageVector.vectorResource(R.drawable.ic_shizuku)
-        Authorizer.Dhizuku -> AppIcons.InstallAllowRestrictedPermissions
-        else -> AppIcons.Authorizer
-    }
+private fun smartAuthorizerIcon(authorizer: Authorizer): ImageVector = when (authorizer) {
+    Authorizer.None -> AppIcons.None
+    Authorizer.Root -> AppIcons.Root
+    Authorizer.Shizuku -> ImageVector.vectorResource(R.drawable.ic_shizuku)
+    Authorizer.Dhizuku -> AppIcons.InstallAllowRestrictedPermissions
+    else -> AppIcons.Authorizer
+}
 
 private fun smartAuthorizerAvailabilityDescription(
     authorizer: Authorizer,
@@ -480,39 +383,38 @@ private fun smartAuthorizerAvailabilityDescription(
     dhizukuAvailable: Boolean,
     dhizukuAuthorized: Boolean,
     isSystemApp: Boolean,
-    getString: (Int) -> String
-): String =
-    when (authorizer) {
-        Authorizer.Root -> if (rootMode != RootMode.None) {
-            "${getString(R.string.available)} (${rootMode.name})"
-        } else {
-            getString(R.string.unavailable)
-        }
-
-        Authorizer.Shizuku -> when {
-            shizukuAuthorized -> "${getString(R.string.activate)} (${shizukuMode.desc})"
-            shizukuMode != ShizukuMode.NONE -> getString(R.string.shizuku_not_authorized)
-            else -> getString(R.string.shizuku_not_available)
-        }
-
-        Authorizer.Dhizuku -> when {
-            dhizukuAuthorized -> getString(R.string.activate)
-            dhizukuAvailable -> getString(R.string.dhizuku_not_authorized)
-            else -> getString(R.string.dhizuku_not_available)
-        }
-
-        Authorizer.None -> getString(
-            if (isSystemApp) R.string.working_status_system_installer_desc
-            else R.string.working_status_none_authorizer_desc
-        )
-
-        else -> authorizer.value
+    getString: (Int) -> String,
+): String = when (authorizer) {
+    Authorizer.Root -> if (rootMode != RootMode.None) {
+        "${getString(R.string.available)} (${rootMode.name})"
+    } else {
+        getString(R.string.unavailable)
     }
 
-private fun List<SmartAuthorizerCandidate>.move(
-    from: Int,
-    to: Int
-): List<SmartAuthorizerCandidate> {
+    Authorizer.Shizuku -> when {
+        shizukuAuthorized -> "${getString(R.string.activate)} (${shizukuMode.desc})"
+        shizukuMode != ShizukuMode.NONE -> getString(R.string.shizuku_not_authorized)
+        else -> getString(R.string.shizuku_not_available)
+    }
+
+    Authorizer.Dhizuku -> when {
+        dhizukuAuthorized -> getString(R.string.activate)
+        dhizukuAvailable -> getString(R.string.dhizuku_not_authorized)
+        else -> getString(R.string.dhizuku_not_available)
+    }
+
+    Authorizer.None -> getString(
+        if (isSystemApp) {
+            R.string.working_status_system_installer_desc
+        } else {
+            R.string.working_status_none_authorizer_desc
+        },
+    )
+
+    else -> authorizer.value
+}
+
+private fun List<SmartAuthorizerCandidate>.move(from: Int, to: Int): List<SmartAuthorizerCandidate> {
     if (from !in indices || to !in indices || from == to) return this
     return toMutableList().apply {
         val item = removeAt(from)
@@ -520,17 +422,13 @@ private fun List<SmartAuthorizerCandidate>.move(
     }
 }
 
-private fun List<SmartAuthorizerCandidate>.toggle(
-    authorizer: Authorizer,
-    enabled: Boolean
-): List<SmartAuthorizerCandidate> =
-    map { candidate ->
-        if (candidate.authorizer == authorizer) {
-            candidate.copy(enabled = enabled)
-        } else {
-            candidate
-        }
+private fun List<SmartAuthorizerCandidate>.toggle(authorizer: Authorizer, enabled: Boolean): List<SmartAuthorizerCandidate> = map { candidate ->
+    if (candidate.authorizer == authorizer) {
+        candidate.copy(enabled = enabled)
+    } else {
+        candidate
     }
+}
 
 /**
  * Widget for selecting the Root Implementation (Magisk/KernelSU/APatch).
@@ -545,7 +443,7 @@ private fun LabRootImplementationWidget(viewModel: LabSettingsViewModel) {
         mapOf(
             RootMode.Magisk to "Magisk",
             RootMode.KernelSU to "KernelSU",
-            RootMode.APatch to "APatch"
+            RootMode.APatch to "APatch",
         )
     }
 
@@ -564,39 +462,6 @@ private fun LabRootImplementationWidget(viewModel: LabSettingsViewModel) {
             keys.getOrNull(newIndex)?.let { impl ->
                 viewModel.dispatch(LabSettingsAction.LabChangeRootImplementation(impl))
             }
-        }
-    )
-}
-
-@Composable
-private fun LabHttpProfileWidget(viewModel: LabSettingsViewModel) {
-    val uiState by viewModel.state.collectAsStateWithLifecycle()
-    val profiles = remember {
-        listOf(
-            HttpProfile.ALLOW_SECURE,
-            HttpProfile.ALLOW_LOCAL,
-            HttpProfile.ALLOW_ALL
-        )
-    }
-    val options = profiles.map { profile ->
-        when (profile) {
-            HttpProfile.ALLOW_SECURE -> stringResource(R.string.lab_http_profile_secure)
-            HttpProfile.ALLOW_LOCAL -> stringResource(R.string.lab_http_profile_local)
-            HttpProfile.ALLOW_ALL -> stringResource(R.string.lab_http_profile_all)
-        }
-    }
-
-    val currentIndex = profiles.indexOf(uiState.labHttpProfile).coerceAtLeast(0)
-
-    DropDownMenuWidget(
-        icon = Icons.Default.Security,
-        title = stringResource(R.string.lab_http_profile),
-        description = options.getOrNull(currentIndex),
-        choice = currentIndex,
-        data = options,
-        onChoiceChange = { index ->
-            val selectedProfile = profiles.getOrElse(index) { HttpProfile.ALLOW_SECURE }
-            viewModel.dispatch(LabSettingsAction.LabChangeHttpProfile(selectedProfile))
-        }
+        },
     )
 }

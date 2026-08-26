@@ -1,6 +1,5 @@
 package com.rosan.installer.domain.engine.model.source
 
-import org.apache.commons.compress.archivers.zip.ZipFile
 import java.io.Closeable
 import java.io.File
 import java.io.FileDescriptor
@@ -20,30 +19,23 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 import kotlin.math.min
-
-data class ZipEntryMetadata(
-    val uncompressedSize: Long,
-    val compressedSize: Long,
-    val crc: Long,
-    val compressionMethod: Int
-)
-
-interface ZipEntryMetadataSource {
-    val zipEntryMetadata: ZipEntryMetadata?
-}
+import org.apache.commons.compress.archivers.zip.ZipFile
 
 sealed class DataEntity(open var source: DataEntity? = null) {
     abstract fun getInputStream(): InputStream?
+
+    open fun getInstallInputStream(): InputStream? = getInputStream()
 
     abstract fun getSize(): Long
 
     fun getInputStreamWhileNotEmpty(): InputStream? = getInputStream() ?: source?.getInputStream()
 
+    fun getInstallInputStreamWhileNotEmpty(): InputStream? = getInstallInputStream() ?: source?.getInstallInputStream()
+
     fun getSourceTop(): DataEntity = source?.getSourceTop() ?: this
 
     open class FileEntity(val path: String) : DataEntity() {
-        open fun openChannel(): SeekableByteChannel =
-            FileChannel.open(File(path).toPath(), StandardOpenOption.READ)
+        open fun openChannel(): SeekableByteChannel = FileChannel.open(File(path).toPath(), StandardOpenOption.READ)
 
         override fun getInputStream(): InputStream = File(path).inputStream()
 
@@ -58,22 +50,35 @@ sealed class DataEntity(open var source: DataEntity? = null) {
         val length: Long,
         private val channelFactory: () -> SeekableByteChannel,
         private val descriptorFactory: () -> OwnedFileDescriptor,
+        private val inputStreamFactory: (() -> InputStream)? = null,
+        val preInstallSignatureAnalysis: Boolean = true,
+        val preInstallSigningBlockAnalysis: Boolean = false,
+        val preInstallIdentityAnalysis: Boolean = true,
+        val analysisMaterializationPolicy: AnalysisMaterializationPolicy =
+            AnalysisMaterializationPolicy.TEMPORARY_CACHE,
+        val analysisMaterializationKey: AnalysisMaterializationKey? = null,
         override val zipEntryMetadata: ZipEntryMetadata? = null,
-        val archiveEntryName: String? = null
-    ) : FileEntity(path), ZipEntryMetadataSource {
+        val archiveEntryName: String? = null,
+    ) : FileEntity(path),
+        ZipEntryMetadataSource {
         init {
             require(startOffset >= 0L) { "startOffset must be non-negative" }
             require(length > 0L) { "length must be positive" }
+            require(
+                analysisMaterializationPolicy != AnalysisMaterializationPolicy.RETAINED_SOURCE_REPLACEMENT ||
+                    analysisMaterializationKey != null,
+            ) { "Retained source replacement requires a materialization key" }
         }
 
         override fun openChannel(): SeekableByteChannel = channelFactory()
 
         override fun getInputStream(): InputStream = Channels.newInputStream(openChannel())
 
+        override fun getInstallInputStream(): InputStream = inputStreamFactory?.invoke() ?: getInputStream()
+
         override fun getSize(): Long = length
 
-        fun <R> withFileDescriptor(block: (FileDescriptor) -> R): R =
-            descriptorFactory().use { descriptor -> block(descriptor.fileDescriptor) }
+        fun <R> withFileDescriptor(block: (FileDescriptor) -> R): R = descriptorFactory().use { descriptor -> block(descriptor.fileDescriptor) }
 
         /**
          * Creates a view over a byte range of this descriptor without opening the source path.
@@ -84,7 +89,7 @@ sealed class DataEntity(open var source: DataEntity? = null) {
             relativeOffset: Long,
             subrangeLength: Long,
             zipEntryMetadata: ZipEntryMetadata? = null,
-            archiveEntryName: String? = null
+            archiveEntryName: String? = null,
         ): FileDescriptorEntity {
             require(relativeOffset >= 0L) { "relativeOffset must be non-negative" }
             require(subrangeLength > 0L) { "subrangeLength must be positive" }
@@ -104,12 +109,17 @@ sealed class DataEntity(open var source: DataEntity? = null) {
                     BoundedSeekableByteChannel(
                         delegate = parent.openChannel(),
                         startOffset = relativeOffset,
-                        rangeLength = subrangeLength
+                        rangeLength = subrangeLength,
                     )
                 },
                 descriptorFactory = descriptorFactory,
+                preInstallSignatureAnalysis = parent.preInstallSignatureAnalysis,
+                preInstallSigningBlockAnalysis = parent.preInstallSigningBlockAnalysis,
+                preInstallIdentityAnalysis = parent.preInstallIdentityAnalysis,
+                analysisMaterializationPolicy = parent.analysisMaterializationPolicy,
+                analysisMaterializationKey = parent.analysisMaterializationKey,
                 zipEntryMetadata = zipEntryMetadata,
-                archiveEntryName = archiveEntryName
+                archiveEntryName = archiveEntryName,
             ).apply {
                 // A ZIP entry slice still originates from the same top-level source. Do not replace
                 // it with the parent descriptor: grouping and source cleanup intentionally resolve
@@ -119,10 +129,7 @@ sealed class DataEntity(open var source: DataEntity? = null) {
         }
     }
 
-    class OwnedFileDescriptor(
-        val fileDescriptor: FileDescriptor,
-        private val closeAction: () -> Unit
-    ) : Closeable {
+    class OwnedFileDescriptor(val fileDescriptor: FileDescriptor, private val closeAction: () -> Unit) : Closeable {
         private val closed = AtomicBoolean(false)
 
         override fun close() {
@@ -130,11 +137,9 @@ sealed class DataEntity(open var source: DataEntity? = null) {
         }
     }
 
-    class ZipFileEntity(
-        val name: String,
-        val parent: FileEntity,
-        override val zipEntryMetadata: ZipEntryMetadata? = null
-    ) : DataEntity(), ZipEntryMetadataSource {
+    class ZipFileEntity(val name: String, val parent: FileEntity, override val zipEntryMetadata: ZipEntryMetadata? = null) :
+        DataEntity(),
+        ZipEntryMetadataSource {
         override fun getInputStream(): InputStream? {
             val zipFile = openCommonsZipFile(parent)
             val entry = zipFile.getEntry(name)
@@ -163,7 +168,7 @@ sealed class DataEntity(open var source: DataEntity? = null) {
                     // DEFLATED entries, whereas -1 just degrades progress to indeterminate.
                     entry?.size?.takeIf { it >= 0L } ?: -1L
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 -1L
             }
         }
@@ -182,13 +187,14 @@ sealed class DataEntity(open var source: DataEntity? = null) {
         val compressedSize: Long,
         private val uncompressedSize: Long,
         val compressionMethod: Int,
-        val crc: Long
-    ) : DataEntity(), ZipEntryMetadataSource {
+        val crc: Long,
+    ) : DataEntity(),
+        ZipEntryMetadataSource {
         override val zipEntryMetadata = ZipEntryMetadata(
             uncompressedSize = uncompressedSize,
             compressedSize = compressedSize,
             crc = crc,
-            compressionMethod = compressionMethod
+            compressionMethod = compressionMethod,
         )
 
         init {
@@ -245,10 +251,7 @@ sealed class DataEntity(open var source: DataEntity? = null) {
         override fun toString(): String = "$parent!$name"
     }
 
-    class StreamDataEntity(
-        private val stream: InputStream,
-        private val length: Long
-    ) : DataEntity() {
+    class StreamDataEntity(private val stream: InputStream, private val length: Long) : DataEntity() {
         override fun getInputStream(): InputStream = stream
 
         // Return the Content-Length from the network
@@ -258,10 +261,7 @@ sealed class DataEntity(open var source: DataEntity? = null) {
     }
 
     /** Retains a descriptor-backed source until an installer explicitly needs a local path. */
-    class DeferredFileMaterializationEntity(
-        val file: FileEntity,
-        val cacheDirectory: String
-    ) : DataEntity(file.source) {
+    class DeferredFileMaterializationEntity(val file: FileEntity, val cacheDirectory: String) : DataEntity(file.source) {
         override fun getInputStream(): InputStream = file.getInputStream()
 
         override fun getSize(): Long = file.getSize()
@@ -290,24 +290,15 @@ private fun openCommonsZipFile(source: DataEntity.FileEntity): ZipFile {
 
 private val ZIP_FALLBACK_CHARSET: Charset = Charset.forName("Cp437")
 
-private class ZipFileClosingInputStream(
-    input: InputStream,
-    private val zipFile: ZipFile
-) : FilterInputStream(input) {
+private class ZipFileClosingInputStream(input: InputStream, private val zipFile: ZipFile) : FilterInputStream(input) {
     override fun close() {
-        try {
+        zipFile.use { _ ->
             super.close()
-        } finally {
-            zipFile.close()
         }
     }
 }
 
-private class FileSliceInputStream(
-    source: DataEntity.FileEntity,
-    offset: Long,
-    length: Long
-) : InputStream() {
+private class FileSliceInputStream(source: DataEntity.FileEntity, offset: Long, length: Long) : InputStream() {
     private val channel = source.openChannel()
     private val singleByte = ByteBuffer.allocate(1)
     private var remaining = length
@@ -317,7 +308,7 @@ private class FileSliceInputStream(
             val fileSize = channel.size()
             if (offset < 0 || length < 0 || offset > fileSize || length > fileSize - offset) {
                 throw ZipException(
-                    "ZIP entry slice exceeds parent file: offset=$offset, length=$length, size=$fileSize"
+                    "ZIP entry slice exceeds parent file: offset=$offset, length=$length, size=$fileSize",
                 )
             }
             channel.position(offset)
@@ -333,7 +324,9 @@ private class FileSliceInputStream(
         while (true) {
             when (channel.read(singleByte)) {
                 -1 -> return -1
+
                 0 -> continue
+
                 else -> {
                     remaining--
                     return singleByte.array()[0].toInt() and 0xFF
@@ -369,7 +362,7 @@ private class FileSliceInputStream(
 private class BoundedSeekableByteChannel(
     private val delegate: SeekableByteChannel,
     private val startOffset: Long,
-    private val rangeLength: Long
+    private val rangeLength: Long,
 ) : SeekableByteChannel {
     private var position = 0L
     private var closed = false
@@ -411,8 +404,7 @@ private class BoundedSeekableByteChannel(
         return rangeLength
     }
 
-    override fun truncate(size: Long): SeekableByteChannel =
-        throw java.nio.channels.NonWritableChannelException()
+    override fun truncate(size: Long): SeekableByteChannel = throw java.nio.channels.NonWritableChannelException()
 
     override fun isOpen(): Boolean = !closed && delegate.isOpen
 
@@ -428,10 +420,7 @@ private class BoundedSeekableByteChannel(
     }
 }
 
-internal class RawDeflateInputStream(
-    input: InputStream,
-    private val ownedInflater: Inflater = Inflater(true)
-) : InflaterInputStream(input, ownedInflater, INFLATE_BUFFER_SIZE) {
+internal class RawDeflateInputStream(input: InputStream, private val ownedInflater: Inflater = Inflater(true)) : InflaterInputStream(input, ownedInflater, INFLATE_BUFFER_SIZE) {
     private var resourcesReleased = false
 
     override fun close() {
@@ -455,7 +444,7 @@ private class CrcVerifyingInputStream(
     input: InputStream,
     private val expectedSize: Long,
     private val expectedCrc: Long,
-    private val entryName: String
+    private val entryName: String,
 ) : FilterInputStream(input) {
     private val crc = CRC32()
     private var bytesRead = 0L
@@ -510,12 +499,12 @@ private class CrcVerifyingInputStream(
         if (verified) return
         if (bytesRead != expectedSize) {
             throw ZipException(
-                "ZIP entry size mismatch for $entryName: expected=$expectedSize, actual=$bytesRead"
+                "ZIP entry size mismatch for $entryName: expected=$expectedSize, actual=$bytesRead",
             )
         }
         if (crc.value != expectedCrc) {
             throw ZipException(
-                "ZIP entry CRC mismatch for $entryName: expected=$expectedCrc, actual=${crc.value}"
+                "ZIP entry CRC mismatch for $entryName: expected=$expectedCrc, actual=${crc.value}",
             )
         }
         verified = true

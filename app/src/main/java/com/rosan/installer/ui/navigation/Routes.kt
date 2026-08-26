@@ -24,6 +24,9 @@ sealed interface Route : NavKey {
     data object Theme : Route
 
     @Serializable
+    data object Network : Route
+
+    @Serializable
     data object InstallerGlobal : Route
 
     @Serializable
@@ -48,12 +51,8 @@ sealed interface Route : NavKey {
     data object AuthorizerCust : Route
 
     @Serializable
-    data class EditConfig(
-        val id: Long
-    ) : Route
+    data class EditConfig(val id: Long) : Route
 
     @Serializable
-    data class ApplyConfig(
-        val id: Long
-    ) : Route
+    data class ApplyConfig(val id: Long) : Route
 }

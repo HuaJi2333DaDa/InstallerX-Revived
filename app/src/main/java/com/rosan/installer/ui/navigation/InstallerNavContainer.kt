@@ -29,6 +29,7 @@ import com.rosan.installer.ui.page.main.settings.preferred.installer.authorizer.
 import com.rosan.installer.ui.page.main.settings.preferred.installer.dialog.DialogSettingsPage
 import com.rosan.installer.ui.page.main.settings.preferred.installer.notification.NotificationSettingsPage
 import com.rosan.installer.ui.page.main.settings.preferred.lab.LabPage
+import com.rosan.installer.ui.page.main.settings.preferred.network.NetworkPage
 import com.rosan.installer.ui.page.main.settings.preferred.theme.ThemeSettingsPage
 import com.rosan.installer.ui.page.main.settings.preferred.uninstaller.UninstallerGlobalSettingsPage
 import com.rosan.installer.ui.page.miuix.settings.config.apply.MiuixApplyPage
@@ -42,6 +43,7 @@ import com.rosan.installer.ui.page.miuix.settings.preferred.installer.authorizer
 import com.rosan.installer.ui.page.miuix.settings.preferred.installer.dialog.MiuixDialogSettingsPage
 import com.rosan.installer.ui.page.miuix.settings.preferred.installer.notification.MiuixNotificationSettingsPage
 import com.rosan.installer.ui.page.miuix.settings.preferred.lab.MiuixLabPage
+import com.rosan.installer.ui.page.miuix.settings.preferred.network.MiuixNetworkPage
 import com.rosan.installer.ui.page.miuix.settings.preferred.theme.MiuixThemeSettingsPage
 import com.rosan.installer.ui.page.miuix.settings.preferred.uninstaller.MiuixUninstallerGlobalSettingsPage
 import com.rosan.installer.ui.util.rememberDeviceCornerRadius
@@ -56,7 +58,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun InstallerNavContainer(uiState: ThemeState) {
     val sharedViewModel: SettingsSharedViewModel = koinViewModel(
-        viewModelStoreOwner = LocalActivity.current as ComponentActivity
+        viewModelStoreOwner = LocalActivity.current as ComponentActivity,
     )
 
     val backStack = rememberNavBackStack<Route>(Route.Main)
@@ -69,8 +71,8 @@ fun InstallerNavContainer(uiState: ThemeState) {
     ) {
         val navCornerRadius = rememberDeviceCornerRadius(defaultRadius = 0.dp)
         val roundAllCorners = uiState.predictiveBackAnimation == PredictiveBackAnimation.AOSP ||
-                uiState.predictiveBackAnimation == PredictiveBackAnimation.Scale ||
-                uiState.predictiveBackAnimation == PredictiveBackAnimation.Classic
+            uiState.predictiveBackAnimation == PredictiveBackAnimation.Scale ||
+            uiState.predictiveBackAnimation == PredictiveBackAnimation.Classic
         val backdropColor = if (uiState.useMiuix) {
             MiuixTheme.colorScheme.surface
         } else {
@@ -120,12 +122,12 @@ fun InstallerNavContainer(uiState: ThemeState) {
                     if (uiState.useMiuix) {
                         MiuixEditPage(
                             id = if (id != -1L) id else null,
-                            useBlur = useBlur
+                            useBlur = useBlur,
                         )
                     } else {
                         EditPage(
                             id = if (id != -1L) id else null,
-                            useBlur = useBlur
+                            useBlur = useBlur,
                         )
                     }
                 }
@@ -164,6 +166,15 @@ fun InstallerNavContainer(uiState: ThemeState) {
                         MiuixThemeSettingsPage()
                     } else {
                         ThemeSettingsPage()
+                    }
+                }
+            }
+            entry<Route.Network>(swipeDismiss = swipeBackDirection) {
+                InstallerNavEntry(interceptPredictiveBack, onBack) {
+                    if (uiState.useMiuix) {
+                        MiuixNetworkPage(useBlur)
+                    } else {
+                        NetworkPage(useBlur)
                     }
                 }
             }
@@ -244,11 +255,7 @@ fun InstallerNavContainer(uiState: ThemeState) {
 }
 
 @Composable
-private fun InstallerNavEntry(
-    interceptPredictiveBack: Boolean,
-    onBack: () -> Unit,
-    content: @Composable () -> Unit,
-) {
+private fun InstallerNavEntry(interceptPredictiveBack: Boolean, onBack: () -> Unit, content: @Composable () -> Unit) {
     val navigationEventState = rememberNavigationEventState(NavigationEventInfo.None)
     NavigationBackHandler(
         state = navigationEventState,
