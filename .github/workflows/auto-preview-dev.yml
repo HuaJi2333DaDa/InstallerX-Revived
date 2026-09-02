@@ -202,7 +202,7 @@ jobs:
           mkdir -p "$APP_DIR"
           
           echo "=> 查找编译好的 Release APK 文件并重命名复制..."
-          APK_PATH=$(find app/build/outputs/apk -name "*-unstable-release*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*.apk" | grep -i "release" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "错误：未找到 Release APK 文件！"
             exit 1
