@@ -258,12 +258,18 @@ jobs:
           zip -r9 ../InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip .
           cd ..
 
-      - name: Upload Artifacts
+      - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: dev-artifacts-${{ steps.commit_sha.outputs.SHORT_SHA }}
-          path: |
-            app/build/outputs/apk/**/release/*.apk
-            InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip
+          name: dev-apk-${{ steps.commit_sha.outputs.SHORT_SHA }}
+          path: app/build/outputs/apk/**/release/*.apk
+          retention-days: 30
+          archive: false
+
+      - name: Upload Magisk Module
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-magisk-module-${{ steps.commit_sha.outputs.SHORT_SHA }}
+          path: InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip
           retention-days: 30
           archive: false
