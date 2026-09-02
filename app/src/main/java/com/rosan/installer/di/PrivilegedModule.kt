@@ -2,23 +2,9 @@
 // Copyright (C) 2025-2026 InstallerX Revived contributors
 package com.rosan.installer.di
 
-import com.rosan.installer.framework.privileged.provider.AppOpsProviderImpl
-import com.rosan.installer.framework.privileged.provider.ComponentOpsProviderImpl
-import com.rosan.installer.framework.privileged.provider.PermissionProviderImpl
-import com.rosan.installer.framework.privileged.provider.PostInstallTaskProviderImpl
-import com.rosan.installer.framework.privileged.provider.SessionDetailsProviderImpl
-import com.rosan.installer.framework.privileged.provider.ShellExecutionProviderImpl
-import com.rosan.installer.framework.privileged.provider.SystemInfoProviderImpl
-import com.rosan.installer.framework.privileged.lifecycle.RecyclerManager
-import com.rosan.installer.framework.privileged.recycler.AppProcessRecycler
-import com.rosan.installer.framework.privileged.recycler.ProcessHookRecycler
-import com.rosan.installer.framework.privileged.recycler.ProcessUserServiceRecycler
-import com.rosan.installer.framework.privileged.recycler.ShizukuHookRecycler
-import com.rosan.installer.framework.privileged.recycler.ShizukuUserServiceRecycler
-import com.rosan.installer.framework.service.AutoLockService
+import com.rosan.installer.domain.engine.provider.SessionDetailsProvider
 import com.rosan.installer.domain.privileged.provider.AppOpsProvider
 import com.rosan.installer.domain.privileged.provider.ComponentOpsProvider
-import com.rosan.installer.domain.engine.provider.SessionDetailsProvider
 import com.rosan.installer.domain.privileged.provider.PermissionProvider
 import com.rosan.installer.domain.privileged.provider.PostInstallTaskProvider
 import com.rosan.installer.domain.privileged.provider.ShellExecutionProvider
@@ -26,6 +12,20 @@ import com.rosan.installer.domain.privileged.provider.SystemInfoProvider
 import com.rosan.installer.domain.privileged.usecase.GetAvailableUsersUseCase
 import com.rosan.installer.domain.privileged.usecase.OpenAppUseCase
 import com.rosan.installer.domain.privileged.usecase.OpenLSPosedUseCase
+import com.rosan.installer.framework.privileged.core.infrastructure.lifecycle.RecyclerManager
+import com.rosan.installer.framework.privileged.core.infrastructure.process.AppProcessTerminal
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.AppProcessRecycler
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.ProcessHookRecycler
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.ProcessUserServiceRecycler
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.ShizukuHookRecycler
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.ShizukuUserServiceRecycler
+import com.rosan.installer.framework.privileged.provider.AppOpsProviderImpl
+import com.rosan.installer.framework.privileged.provider.ComponentOpsProviderImpl
+import com.rosan.installer.framework.privileged.provider.PermissionProviderImpl
+import com.rosan.installer.framework.privileged.provider.PostInstallTaskProviderImpl
+import com.rosan.installer.framework.privileged.provider.SessionDetailsProviderImpl
+import com.rosan.installer.framework.privileged.provider.ShellExecutionProviderImpl
+import com.rosan.installer.framework.privileged.provider.SystemInfoProviderImpl
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
@@ -34,10 +34,7 @@ import org.koin.dsl.module
 
 object RecyclerNames {
     val APP_PROCESS = named("AppProcessManager")
-    val SYSTEM_UID_APP_PROCESS = named("SystemUidAppProcessManager")
     val USER_SERVICE = named("ProcessUserServiceManager")
-    val SYSTEM_UID_USER_SERVICE = named("SystemUidProcessUserServiceManager")
-    val SYSTEM_UID_SHIZUKU_USER_SERVICE = named("SystemUidShizukuUserService")
 }
 
 val privilegedModule = module {
@@ -50,9 +47,6 @@ val privilegedModule = module {
     singleOf(::SystemInfoProviderImpl) { bind<SystemInfoProvider>() }
     singleOf(::SessionDetailsProviderImpl) { bind<SessionDetailsProvider>() }
 
-    // Services
-    singleOf(::AutoLockService)
-
     // UseCases
     factoryOf(::OpenAppUseCase)
     factoryOf(::OpenLSPosedUseCase)
@@ -63,35 +57,18 @@ val privilegedModule = module {
     // 1. Recycler Managers (Singletons)
     // Add named qualifier to distinguish this manager
     single(RecyclerNames.APP_PROCESS) {
-        RecyclerManager<String, AppProcessRecycler> { shell ->
-            AppProcessRecycler(shell)
-        }
-    }
-
-    single(RecyclerNames.SYSTEM_UID_APP_PROCESS) {
-        RecyclerManager<String, AppProcessRecycler> { shell ->
-            AppProcessRecycler(shell)
+        RecyclerManager<AppProcessTerminal, AppProcessRecycler> { terminal ->
+            AppProcessRecycler(terminal)
         }
     }
 
     // Add named qualifier to distinguish this manager
     single(RecyclerNames.USER_SERVICE) {
-        RecyclerManager<String, ProcessUserServiceRecycler> { shell ->
+        RecyclerManager<AppProcessTerminal, ProcessUserServiceRecycler> { terminal ->
             ProcessUserServiceRecycler(
-                shell = shell,
+                terminal = terminal,
                 context = get(),
-                appProcessRecyclerManager = get(RecyclerNames.APP_PROCESS)
-            )
-        }
-    }
-
-    single(RecyclerNames.SYSTEM_UID_USER_SERVICE) {
-        RecyclerManager<String, ProcessUserServiceRecycler> { shell ->
-            ProcessUserServiceRecycler(
-                shell = shell,
-                context = get(),
-                appProcessRecyclerManager = get(RecyclerNames.SYSTEM_UID_APP_PROCESS),
-                serviceClass = ProcessUserServiceRecycler.SystemUidAppProcessService::class.java
+                appProcessRecyclerManager = get(RecyclerNames.APP_PROCESS),
             )
         }
     }
@@ -102,25 +79,18 @@ val privilegedModule = module {
         ShizukuUserServiceRecycler(
             context = get(),
             serviceClass = ShizukuUserServiceRecycler.ShizukuUserService::class.java,
-            processNameSuffix = "shizuku_privileged"
-        )
-    }
-    single(RecyclerNames.SYSTEM_UID_SHIZUKU_USER_SERVICE) {
-        ShizukuUserServiceRecycler(
-            context = get(),
-            serviceClass = ShizukuUserServiceRecycler.SystemUidShizukuUserService::class.java,
-            processNameSuffix = "shizuku_system_privileged"
+            processNameSuffix = "shizuku_privileged",
         )
     }
     singleOf(::ShizukuHookRecycler)
 
     // 3. Shell-dependent Recyclers (Factories)
     // Created dynamically on demand based on the requested shell.
-    factory { (shell: String) ->
+    factory { (terminal: AppProcessTerminal) ->
         ProcessHookRecycler(
-            shell = shell,
+            terminal = terminal,
             context = get(),
-            appProcessRecyclerManager = get(RecyclerNames.APP_PROCESS)
+            appProcessRecyclerManager = get(RecyclerNames.APP_PROCESS),
         )
     }
 }

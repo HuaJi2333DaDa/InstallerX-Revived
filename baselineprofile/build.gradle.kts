@@ -16,16 +16,8 @@ android {
 
     targetProjectPath = ":app"
 
-    // Keep only the "connectivity" dimension
-    flavorDimensions += listOf("connectivity")
-
-    productFlavors {
-        create("online") { dimension = "connectivity" }
-        create("offline") { dimension = "connectivity" }
-
-        // The "Unstable", "Preview", and "Stable" flavors are completely removed
-        // to avoid redundant Baseline Profile generation.
-    }
+    // The target app exposes only the build-level dimension. This test module
+    // selects the Unstable target through missingDimensionStrategy above.
 }
 
 // This is the configuration block for the Baseline Profile plugin.
@@ -46,7 +38,7 @@ androidComponents {
         val artifactsLoader = v.artifacts.getBuiltArtifactsLoader()
         v.instrumentationRunnerArguments.put(
             "targetAppId",
-            v.testedApks.map { artifactsLoader.load(it)?.applicationId }
+            v.testedApks.map { artifactsLoader.load(it)?.applicationId },
         )
     }
 }

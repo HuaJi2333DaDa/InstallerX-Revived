@@ -13,32 +13,35 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class DialogSettingsViewModel(
-    appSettingsRepo: AppSettingsRepository,
-    private val updateSetting: UpdateSettingUseCase
-) : ViewModel() {
+class DialogSettingsViewModel(appSettingsRepo: AppSettingsRepository, private val updateSetting: UpdateSettingUseCase) : ViewModel() {
 
     val state: StateFlow<DialogSettingsState> = appSettingsRepo.preferencesFlow.map { prefs ->
         DialogSettingsState(
+            hideIdenticalComparisons = prefs.hideIdenticalInstallComparisons,
             versionCompareInSingleLine = prefs.versionCompareInSingleLine,
             sdkCompareInMultiLine = prefs.sdkCompareInMultiLine,
             showDialogInstallExtendedMenu = prefs.showDialogInstallExtendedMenu,
+            expandTemporarySettingsByDefault = prefs.expandDialogTemporarySettingsByDefault,
             showSmartSuggestion = prefs.showSmartSuggestion,
             autoSilentInstall = prefs.autoSilentInstall,
             longClickBackgroundInstall = prefs.longClickBackgroundInstall,
             disableNotificationForDialogInstall = prefs.disableNotificationForDialogInstall,
             tapIconToShare = prefs.labTapIconToShare,
             showFilePath = prefs.labShowFilePath,
-            showInstallInitiator = prefs.labShowInstallInitiator
+            showInstallInitiator = prefs.labShowInstallInitiator,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = DialogSettingsState()
+        initialValue = DialogSettingsState(),
     )
 
     fun dispatch(action: DialogSettingsAction) {
         when (action) {
+            is DialogSettingsAction.ChangeHideIdenticalComparisons -> viewModelScope.launch {
+                updateSetting(BooleanSetting.DialogHideIdenticalComparisons, action.hide)
+            }
+
             is DialogSettingsAction.ChangeVersionCompareInSingleLine -> viewModelScope.launch {
                 updateSetting(BooleanSetting.DialogVersionCompareSingleLine, action.compareInSingleLine)
             }
@@ -49,6 +52,10 @@ class DialogSettingsViewModel(
 
             is DialogSettingsAction.ChangeShowDialogInstallExtendedMenu -> viewModelScope.launch {
                 updateSetting(BooleanSetting.DialogShowExtendedMenu, action.showMenu)
+            }
+
+            is DialogSettingsAction.ChangeExpandTemporarySettingsByDefault -> viewModelScope.launch {
+                updateSetting(BooleanSetting.DialogExpandTemporarySettingsByDefault, action.expand)
             }
 
             is DialogSettingsAction.ChangeShowSuggestion -> viewModelScope.launch {

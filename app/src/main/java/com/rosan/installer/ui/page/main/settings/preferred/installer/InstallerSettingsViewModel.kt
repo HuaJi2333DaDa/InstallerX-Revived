@@ -25,7 +25,7 @@ class InstallerSettingsViewModel(
     private val systemEnvProvider: SystemEnvProvider,
     private val updateSetting: UpdateSettingUseCase,
     private val managePackageListUseCase: ManagePackageListUseCase,
-    private val manageSharedUidListUseCase: ManageSharedUidListUseCase
+    private val manageSharedUidListUseCase: ManageSharedUidListUseCase,
 ) : ViewModel() {
 
     val state: StateFlow<InstallerSettingsState> = appSettingsRepo.preferencesFlow.map { prefs ->
@@ -36,6 +36,7 @@ class InstallerSettingsViewModel(
             installerRequireBiometricAuth = prefs.installerRequireBiometricAuth,
             showOPPOSpecial = prefs.showOPPOSpecial,
             checkAppSignature = prefs.checkAppSignature,
+            checkSplitPackageSignatures = prefs.checkSplitPackageSignatures,
             showSignatureInfoOnMatch = prefs.showSignatureInfoOnMatch,
             showSignatureDetails = prefs.showSignatureDetails,
             detectXposedModule = prefs.detectXposedModule,
@@ -43,12 +44,12 @@ class InstallerSettingsViewModel(
             managedInstallerPackages = prefs.managedInstallerPackages,
             managedBlacklistPackages = prefs.managedBlacklistPackages,
             managedSharedUserIdBlacklist = prefs.managedSharedUserIdBlacklist,
-            managedSharedUserIdExemptedPackages = prefs.managedSharedUserIdExemptedPackages
+            managedSharedUserIdExemptedPackages = prefs.managedSharedUserIdExemptedPackages,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = InstallerSettingsState()
+        initialValue = InstallerSettingsState(),
     )
 
     fun dispatch(action: InstallerSettingsAction) {
@@ -56,7 +57,7 @@ class InstallerSettingsViewModel(
             is InstallerSettingsAction.ChangeGlobalAuthorizer -> viewModelScope.launch {
                 updateSetting(
                     StringSetting.Authorizer,
-                    action.authorizer.value
+                    action.authorizer.value,
                 )
             }
 
@@ -65,42 +66,49 @@ class InstallerSettingsViewModel(
             is InstallerSettingsAction.ChangeShowOPPOSpecial -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.DialogShowOppoSpecial,
-                    action.show
+                    action.show,
                 )
             }
 
             is InstallerSettingsAction.ChangeCheckAppSignature -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.CheckAppSignature,
-                    action.check
+                    action.check,
+                )
+            }
+
+            is InstallerSettingsAction.ChangeCheckSplitPackageSignatures -> viewModelScope.launch {
+                updateSetting(
+                    BooleanSetting.CheckSplitPackageSignatures,
+                    action.check,
                 )
             }
 
             is InstallerSettingsAction.ChangeShowSignatureInfoOnMatch -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.ShowSignatureInfoOnMatch,
-                    action.show
+                    action.show,
                 )
             }
 
             is InstallerSettingsAction.ChangeShowSignatureDetails -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.ShowSignatureDetails,
-                    action.show
+                    action.show,
                 )
             }
 
             is InstallerSettingsAction.ChangeDetectXposedModule -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.DetectXposedModule,
-                    action.detect
+                    action.detect,
                 )
             }
 
             is InstallerSettingsAction.ChangeQuickOpenLSPosed -> viewModelScope.launch {
                 updateSetting(
                     BooleanSetting.QuickOpenLSPosed,
-                    action.open
+                    action.open,
                 )
             }
 
@@ -137,18 +145,26 @@ class InstallerSettingsViewModel(
             }
 
             is InstallerSettingsAction.MoveManagedInstallerPackage -> viewModelScope.launch {
-                managePackageListUseCase.movePackage(NamedPackageListSetting.ManagedInstallerPackages, action.fromIndex, action.toIndex)
+                managePackageListUseCase.movePackage(
+                    NamedPackageListSetting.ManagedInstallerPackages,
+                    action.fromIndex,
+                    action.toIndex,
+                )
             }
 
             is InstallerSettingsAction.MoveManagedBlacklistPackage -> viewModelScope.launch {
-                managePackageListUseCase.movePackage(NamedPackageListSetting.ManagedBlacklistPackages, action.fromIndex, action.toIndex)
+                managePackageListUseCase.movePackage(
+                    NamedPackageListSetting.ManagedBlacklistPackages,
+                    action.fromIndex,
+                    action.toIndex,
+                )
             }
 
             is InstallerSettingsAction.MoveManagedSharedUserIdBlacklist -> viewModelScope.launch {
                 manageSharedUidListUseCase.moveUid(
                     SharedUidListSetting.ManagedSharedUserIdBlacklist,
                     action.fromIndex,
-                    action.toIndex
+                    action.toIndex,
                 )
             }
 
@@ -156,7 +172,7 @@ class InstallerSettingsViewModel(
                 managePackageListUseCase.movePackage(
                     NamedPackageListSetting.ManagedSharedUserIdExemptedPackages,
                     action.fromIndex,
-                    action.toIndex
+                    action.toIndex,
                 )
             }
         }

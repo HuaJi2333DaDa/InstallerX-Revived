@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageInstallerHidden
+import android.content.pm.PackageInstallerHidden.ACTION_UNARCHIVE_DIALOG
+import android.content.pm.PackageInstallerHidden.ACTION_UNARCHIVE_ERROR_DIALOG
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -77,23 +79,24 @@ class UnarchiveActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun handleIntent(intent: Intent, session: InstallerSessionRepository): Boolean =
-        when (intent.action) {
-            ACTION_UNARCHIVE_DIALOG -> resolveUnarchive(intent, session)
-            ACTION_UNARCHIVE_ERROR_DIALOG -> resolveUnarchiveError(intent, session)
-            else -> {
-                Timber.e("Unsupported unarchive action: ${intent.action}")
-                finishAndCloseSession()
-                false
-            }
+    private fun handleIntent(intent: Intent, session: InstallerSessionRepository): Boolean = when (intent.action) {
+        ACTION_UNARCHIVE_DIALOG -> resolveUnarchive(intent, session)
+
+        ACTION_UNARCHIVE_ERROR_DIALOG -> resolveUnarchiveError(intent, session)
+
+        else -> {
+            Timber.e("Unsupported unarchive action: ${intent.action}")
+            finishAndCloseSession()
+            false
         }
+    }
 
     private fun resolveUnarchive(intent: Intent, session: InstallerSessionRepository): Boolean {
         val packageName = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
         val sender = IntentCompat.getParcelableExtra(
             intent,
             PackageInstallerHidden.EXTRA_UNARCHIVE_INTENT_SENDER,
-            IntentSender::class.java
+            IntentSender::class.java,
         )
         if (packageName.isNullOrBlank() || sender == null) {
             Timber.e("Unarchive dialog missing package name or intent sender.")
@@ -110,13 +113,13 @@ class UnarchiveActivity : ComponentActivity() {
             status = UnarchiveStatus.fromPlatformStatus(
                 intent.getIntExtra(
                     PackageInstallerHidden.EXTRA_UNARCHIVE_STATUS,
-                    UnarchiveStatus.GENERIC_ERROR
-                )
+                    UnarchiveStatus.GENERIC_ERROR,
+                ),
             ),
             requiredBytes = intent.getLongExtra(PackageInstallerHidden.EXTRA_UNARCHIVE_REQUIRED_BYTES, 0L),
             pendingIntent = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, PendingIntent::class.java),
             installerPackageName = intent.getStringExtra(PackageInstallerHidden.EXTRA_UNARCHIVE_INSTALLER_PACKAGE_NAME),
-            installerLabel = intent.getStringExtra(PackageInstallerHidden.EXTRA_UNARCHIVE_INSTALLER_TITLE)
+            installerLabel = intent.getStringExtra(PackageInstallerHidden.EXTRA_UNARCHIVE_INSTALLER_TITLE),
         )
 
         session.resolveUnarchiveError(this, info)
@@ -142,10 +145,5 @@ class UnarchiveActivity : ComponentActivity() {
         if (sessionClosed) return
         sessionClosed = true
         session?.close()
-    }
-
-    companion object {
-        private const val ACTION_UNARCHIVE_DIALOG = "com.android.intent.action.UNARCHIVE_DIALOG"
-        private const val ACTION_UNARCHIVE_ERROR_DIALOG = "com.android.intent.action.UNARCHIVE_ERROR_DIALOG"
     }
 }

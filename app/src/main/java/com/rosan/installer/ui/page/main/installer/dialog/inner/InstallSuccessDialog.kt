@@ -5,12 +5,17 @@ package com.rosan.installer.ui.page.main.installer.dialog.inner
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rosan.installer.R
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
@@ -22,6 +27,7 @@ import com.rosan.installer.domain.settings.model.config.isPrivileged
 import com.rosan.installer.ui.page.main.installer.InstallerViewAction
 import com.rosan.installer.ui.page.main.installer.InstallerViewModel
 import com.rosan.installer.ui.page.main.installer.dialog.DialogButton
+import com.rosan.installer.ui.page.main.installer.dialog.DialogInnerParams
 import com.rosan.installer.ui.page.main.installer.dialog.DialogParams
 import com.rosan.installer.ui.page.main.installer.dialog.DialogParamsType
 import com.rosan.installer.ui.page.main.installer.dialog.dialogButtons
@@ -32,9 +38,7 @@ import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 @Composable
-fun installSuccessDialog(
-    viewModel: InstallerViewModel
-): DialogParams {
+fun installSuccessDialog(viewModel: InstallerViewModel): DialogParams {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val config = uiState.config
@@ -56,7 +60,8 @@ fun installSuccessDialog(
         ?: selectedEntities?.filterIsInstance<AppEntity.ModuleEntity>()?.firstOrNull()
 
     val isXposedModule =
-        settings.detectXposedModule && if (effectivePrimaryEntity is AppEntity.BaseEntity) effectivePrimaryEntity.isXposedModule else false
+        settings.detectXposedModule &&
+            if (effectivePrimaryEntity is AppEntity.BaseEntity) effectivePrimaryEntity.isXposedModule else false
     val hasPrivilege = config.isPrivileged(deviceCapabilityProvider)
 
     val baseParams = installInfoDialog(
@@ -66,31 +71,44 @@ fun installSuccessDialog(
                 context.startActivity(
                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                         .setData(Uri.fromParts("package", packageName, null))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
             viewModel.dispatch(InstallerViewAction.Background)
-        }
+        },
     )
 
     return baseParams.copy(
+        text = DialogInnerParams(
+            DialogParamsType.InstallerInstallSuccess.id,
+        ) {
+            Text(
+                text = stringResource(R.string.installer_install_success),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
         buttons = dialogButtons(
-            DialogParamsType.InstallerInstallSuccess.id
+            DialogParamsType.InstallerInstallSuccess.id,
         ) {
             val launchIntent = remember(packageName) {
                 if (packageName.isNotEmpty()) {
                     context.packageManager.getLaunchIntentForPackage(packageName)
-                } else null
+                } else {
+                    null
+                }
             }
 
             buildList {
                 if (launchIntent != null) {
                     add(
                         DialogButton(stringResource(R.string.open)) {
+                            viewModel.dispatch(InstallerViewAction.PrepareClose)
                             coroutineScope.launch(Dispatchers.IO) {
                                 val result = openAppUseCase(
                                     config = config,
-                                    launchIntent = launchIntent
+                                    launchIntent = launchIntent,
                                 )
 
                                 when (result) {
@@ -114,12 +132,13 @@ fun installSuccessDialog(
                                     }
                                 }
                             }
-                        }
+                        },
                     )
                 }
                 if (isXposedModule && settings.quickOpenLSPosed && hasPrivilege) {
                     add(
                         DialogButton(stringResource(R.string.open_lsposed)) {
+                            viewModel.dispatch(InstallerViewAction.PrepareClose)
                             coroutineScope.launch(Dispatchers.IO) {
                                 val success = openLSPosedUseCase(config)
                                 if (success) {
@@ -128,15 +147,15 @@ fun installSuccessDialog(
                                     }
                                 }
                             }
-                        }
+                        },
                     )
                 }
                 add(
                     DialogButton(stringResource(R.string.finish)) {
                         viewModel.dispatch(InstallerViewAction.Close)
-                    }
+                    },
                 )
             }
-        }
+        },
     )
 }

@@ -44,7 +44,7 @@ Several product behaviors are intentionally flow-specific. Do **not** assume a f
 
 ## Critical project constraints
 
-* Preserve the **online/offline** product boundary. The offline flavor must not silently gain network-only behavior or permissions.
+* Preserve the runtime network-access boundary. The unified APK may declare network permissions, but network requests must remain disabled when the in-app network setting is off.
 * Prefer the repository’s existing **native API** paths and abstractions. Do not introduce shell-command implementations as a shortcut unless the maintainer explicitly requests it.
 * Treat flow-specific behavior as flow-specific. A capability that exists for dialog installation is not automatically valid for notification or automatic installation.
 * When changing behavior that is described in `docs/README.md`, update it or call out the documentation impact in the handoff.
@@ -111,19 +111,19 @@ Never commit credentials, inline them into tracked files, or weaken the existing
 
 ### Standard smoke build
 
-For changes that do not affect connectivity flavors or variant-specific behavior, prefer the faster single-variant smoke build:
+For changes that do not affect variant-specific behavior, prefer the faster single-variant smoke build:
 
 ```bash
-./gradlew assembleOnlineUnstableDebug \
-  -PAPP_ID="com.rosan.installer.x.revived.test"
+./gradlew assembleUnstableDebug
 ```
 
-Use the full PR-CI pair when the change can reasonably affect app compilation across connectivity flavors, resources, dependency wiring, or variant-sensitive behavior:
+Use the PR-equivalent build when the change can reasonably affect app compilation, resources, dependency wiring, or variant-sensitive behavior:
 
 ```bash
-./gradlew assembleOnlinePreviewDebug assembleOfflinePreviewDebug \
-  -PAPP_ID="com.rosan.installer.x.revived.test"
+./gradlew assemblePreviewDebug
 ```
+
+For local agent-run verification, do not pass a custom `APP_ID` unless the maintainer explicitly asks for an alternate application ID.
 
 ### Report verification honestly
 
@@ -141,12 +141,8 @@ Do not imply a build or test passed unless it actually did.
 
 ### Flavors and build levels
 
-The app currently uses two flavor dimensions:
+The app currently uses one flavor dimension:
 
-* connectivity:
-
-    * `online`
-    * `offline`
 * level:
 
     * `Unstable`
@@ -155,7 +151,6 @@ The app currently uses two flavor dimensions:
 
 Important build behavior includes:
 
-* connectivity-specific `INTERNET_ACCESS_ENABLED`,
 * build-level-specific `BUILD_LEVEL`,
 * git-hash version suffixes for unstable/preview outputs,
 * an optional `VERSION_NAME` Gradle override for release automation.
@@ -213,7 +208,6 @@ When introducing a new injectable dependency:
 * Monet setup for older platform versions,
 * conditional logging setup,
 * Koin bootstrap,
-* privileged auto-lock service initialization.
 
 Treat the order and presence of this startup logic as sensitive. Do not reorder or remove initialization steps unless the task requires it and the consequences are understood.
 
@@ -425,8 +419,8 @@ Subject rules:
 * use lowercase after the type prefix unless naming a proper noun, API, class, or UI brand,
 * use imperative mood after the prefix,
 * describe behavior or developer intent rather than listing files,
-* prefer a one-line message for most changes,
-* add a body only when it explains important intent, behavior, risk, or multiple independent changes,
+* include a concise body for most non-trivial commits, especially when the change has multiple behavior points, important intent, or risk,
+* use a one-line message only for trivial, self-evident changes,
 * use bullets only for genuinely separate changes, risks, or dependency groups,
 * avoid generic wording such as "Refined", "Enhanced", "Improved", or "Updated",
 * do not invent issue numbers, user impact, names, emails, or identifiers,

@@ -2,30 +2,28 @@
 // Copyright (C) 2025-2026 InstallerX Revived contributors
 package com.rosan.installer.framework.privileged.provider
 
-import com.rosan.installer.framework.privileged.util.deletePaths
-import com.rosan.installer.framework.privileged.util.useDirectPrivileged
-import com.rosan.installer.framework.privileged.util.useUserService
+import android.content.Context
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.privileged.model.PostInstallTaskInfo
 import com.rosan.installer.domain.privileged.provider.PostInstallTaskProvider
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.repository.AppSettingsRepository
 import com.rosan.installer.domain.settings.repository.BooleanSetting
+import com.rosan.installer.framework.privileged.core.execution.dispatcher.useDirectPrivileged
+import com.rosan.installer.framework.privileged.core.execution.dispatcher.useUserService
+import com.rosan.installer.util.deletePaths
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
 class PostInstallTaskProviderImpl(
+    private val context: Context,
     private val appSettingsRepo: AppSettingsRepository,
-    private val capabilityProvider: DeviceCapabilityProvider
+    private val capabilityProvider: DeviceCapabilityProvider,
 ) : PostInstallTaskProvider {
 
-    override suspend fun executeTasks(
-        authorizer: Authorizer,
-        customizeAuthorizer: String,
-        info: PostInstallTaskInfo
-    ) {
+    override suspend fun executeTasks(authorizer: Authorizer, customizeAuthorizer: String, info: PostInstallTaskInfo) {
         // Early exit if no tasks are present
         if (!info.hasTasks) return
 
@@ -41,7 +39,9 @@ class PostInstallTaskProviderImpl(
         ) {
             Timber.d("Elevating Authorizer.None to Authorizer.Root due to system app status and AlwaysUseRoot configuration.")
             Authorizer.Root
-        } else authorizer
+        } else {
+            authorizer
+        }
 
         // 3. Determine permission status based on the potentially elevated authorizer
         val noPerm = finalAuthorizer == Authorizer.None || finalAuthorizer == Authorizer.Dhizuku
@@ -62,7 +62,7 @@ class PostInstallTaskProviderImpl(
                         useDirectPrivileged(
                             isSystemApp = capabilityProvider.isSystemApp,
                             authorizer = finalAuthorizer,
-                            customizeAuthorizer = customizeAuthorizer
+                            customizeAuthorizer = customizeAuthorizer,
                         ) {
                             val result = it.performDexOpt(info.packageName, info.dexoptMode, info.forceDexopt)
                             Timber.i("Dexopt result: $result")
@@ -77,7 +77,7 @@ class PostInstallTaskProviderImpl(
                         // Local deletion for non-privileged authorizers, silently fails on errors.
                         if (noPerm) {
                             Timber.d("Attempting local file deletion for non-privileged authorizer: $finalAuthorizer")
-                            deletePaths(info.deletePaths)
+                            deletePaths(context, info.deletePaths)
                             Timber.i("Local delete completed")
                         } else {
                             // Privileged deletion using UserService.
@@ -85,7 +85,7 @@ class PostInstallTaskProviderImpl(
                             useUserService(
                                 isSystemApp = capabilityProvider.isSystemApp,
                                 authorizer = finalAuthorizer,
-                                customizeAuthorizer = customizeAuthorizer
+                                customizeAuthorizer = customizeAuthorizer,
                             ) {
                                 it.privileged.delete(info.deletePaths.toTypedArray())
                                 Timber.i("Privileged delete completed")

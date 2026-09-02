@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rosan.installer.R
+import com.rosan.installer.domain.engine.model.install.InstallPhase
 import com.rosan.installer.ui.page.main.installer.InstallerStage
 import com.rosan.installer.ui.page.miuix.installer.components.AppInfoSlot
 import com.rosan.installer.ui.page.miuix.installer.components.AppInfoState
@@ -36,12 +37,12 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.isDynamicColor
 fun InstallingContent(
     stage: InstallerStage.Installing,
     appInfo: AppInfoState,
-    onButtonClick: () -> Unit
+    onButtonClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         val displayLabel = stage.appLabel ?: appInfo.label
 
@@ -55,9 +56,11 @@ fun InstallingContent(
                 R.string.installing_progress_text,
                 displayLabel,
                 stage.current,
-                stage.total
+                stage.total,
             )
-        } else null
+        } else {
+            null
+        }
 
         progressText?.let {
             Text(
@@ -67,7 +70,7 @@ fun InstallingContent(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 8.dp),
             )
         }
 
@@ -75,14 +78,15 @@ fun InstallingContent(
         val animatedProgress by animateFloatAsState(
             targetValue = stage.progress,
             animationSpec = tween(durationMillis = 300),
-            label = "ProgressAnimation"
+            label = "ProgressAnimation",
         )
 
         // Dynamic content color based on progress fill
-        val contentColor = if (animatedProgress < 0.45f)
+        val contentColor = if (animatedProgress < 0.45f) {
             if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant
-        else
+        } else {
             MiuixTheme.colorScheme.onPrimary
+        }
 
         ProgressButton(
             progress = animatedProgress,
@@ -94,17 +98,23 @@ fun InstallingContent(
             colors = ProgressButtonDefaults.progressButtonColors(
                 trackColor = if (isDynamicColor) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.secondaryVariant,
                 progressColor = MiuixTheme.colorScheme.primary,
-                contentColor = contentColor
-            )
+                contentColor = contentColor,
+            ),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 InfiniteProgressIndicator(
-                    color = contentColor
+                    color = contentColor,
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     color = contentColor,
-                    text = stringResource(R.string.installer_installing)
+                    text = stringResource(
+                        if (stage.total == 1 && stage.phase == InstallPhase.WRITING) {
+                            R.string.installer_writing
+                        } else {
+                            R.string.installer_installing
+                        },
+                    ),
                 )
             }
         }

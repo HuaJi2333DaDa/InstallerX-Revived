@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 InstallerX Revived contributors
 package com.rosan.installer.ui.page.miuix.widgets
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import kotlin.math.roundToInt
 
 @Composable
 fun MiuixIntNumberPickerWidget(
@@ -30,7 +31,10 @@ fun MiuixIntNumberPickerWidget(
     value: Int,
     startInt: Int,
     endInt: Int,
-    onValueChange: (Int) -> Unit
+    valueSuffix: String = "",
+    subduedValue: Boolean = false,
+    onValueClick: (() -> Unit)? = null,
+    onValueChange: (Int) -> Unit,
 ) {
     // Apply padding to the parent container for uniform spacing on all sides.
     // Use verticalArrangement to define a consistent gap between the text and the slider.
@@ -38,12 +42,12 @@ fun MiuixIntNumberPickerWidget(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Container for title and optional description
             Box(modifier = Modifier.weight(1f)) {
@@ -51,13 +55,13 @@ fun MiuixIntNumberPickerWidget(
                     Text(
                         text = title,
                         color = MiuixTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
                     )
                     description?.let {
                         Text(
                             text = it,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
@@ -66,7 +70,7 @@ fun MiuixIntNumberPickerWidget(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             val steps = (endInt - startInt - 1).coerceAtLeast(0)
 
@@ -77,17 +81,34 @@ fun MiuixIntNumberPickerWidget(
                 enabled = enabled,
                 valueRange = startInt.toFloat()..endInt.toFloat(),
                 steps = steps,
-                hapticEffect = SliderDefaults.SliderHapticEffect.Step
+                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
             )
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Display the current integer value dynamically
+            val valueModifier = Modifier
+                .defaultMinSize(minWidth = 36.dp)
+                .then(
+                    if (onValueClick != null) {
+                        Modifier.clickable(onClick = onValueClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 4.dp, vertical = 8.dp)
             Text(
-                text = value.toString(),
-                modifier = Modifier.defaultMinSize(minWidth = 36.dp),
-                style = MiuixTheme.textStyles.button,
-                color = MiuixTheme.colorScheme.primary
+                text = "$value$valueSuffix",
+                modifier = valueModifier,
+                style = if (subduedValue) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MiuixTheme.textStyles.button
+                },
+                color = if (subduedValue) {
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                } else {
+                    MiuixTheme.colorScheme.primary
+                },
             )
         }
     }

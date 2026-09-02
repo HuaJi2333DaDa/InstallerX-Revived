@@ -9,7 +9,7 @@ import com.rosan.installer.domain.engine.model.packageinfo.AppEntity
 import com.rosan.installer.domain.engine.repository.ModuleInstallerRepository
 import com.rosan.installer.domain.settings.model.config.ConfigModel
 import com.rosan.installer.domain.settings.model.preferences.RootMode
-import com.rosan.installer.framework.privileged.util.useUserService
+import com.rosan.installer.framework.privileged.core.execution.dispatcher.useUserService
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -18,15 +18,13 @@ import timber.log.Timber
 /**
  * A module installer that works by executing shell commands via a REMOTE privileged process (Binder).
  */
-class ShizukuModuleInstallerRepoImpl(
-    private val capabilityProvider: DeviceCapabilityProvider
-) : ModuleInstallerRepository {
+class ShizukuModuleInstallerRepoImpl(private val capabilityProvider: DeviceCapabilityProvider) : ModuleInstallerRepository {
 
     override fun doInstallWork(
         config: ConfigModel,
         module: AppEntity.ModuleEntity,
         useRoot: Boolean,
-        rootMode: RootMode
+        rootMode: RootMode,
     ): Flow<String> = callbackFlow {
         // 1. Resolve Path using Helper
         val modulePath = ModuleInstallerUtils.getModulePathOrThrow(module)
@@ -52,8 +50,8 @@ class ShizukuModuleInstallerRepoImpl(
                     close(
                         ModuleInstallException(
                             errorType = ModuleInstallErrorType.EXIT_CODE_NON_ZERO,
-                            message = "Remote command failed with exit code $exitCode"
-                        )
+                            message = "Remote command failed with exit code $exitCode",
+                        ),
                     )
                 }
             }
@@ -62,7 +60,7 @@ class ShizukuModuleInstallerRepoImpl(
         try {
             useUserService(
                 isSystemApp = capabilityProvider.isSystemApp,
-                authorizer = config.authorizer
+                authorizer = config.authorizer,
             ) { userService ->
                 userService.privileged.execArrWithCallback(command, listener)
             }
@@ -72,8 +70,8 @@ class ShizukuModuleInstallerRepoImpl(
                 ModuleInstallException(
                     errorType = ModuleInstallErrorType.CMD_INIT_FAILED,
                     message = "Failed to initiate remote command: ${e.message}",
-                    cause = e
-                )
+                    cause = e,
+                ),
             )
         }
 

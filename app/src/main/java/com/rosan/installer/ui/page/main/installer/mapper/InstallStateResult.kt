@@ -21,6 +21,9 @@ data class InstallNoticeResources(
     val textSigMismatch: String,
     val textSigUnknown: String,
     val textSigAnalysisIssue: String,
+    val textSigSigningBlockNotInstalled: String,
+    val textSigSigningBlockMatch: String,
+    val textSigSigningBlockUnknown: String,
     val labelPendingSignature: String,
     val labelInstalledSignature: String,
     val labelSignatureAnalysisIssues: String,
@@ -28,6 +31,7 @@ data class InstallNoticeResources(
     val labelSignatureSplitMismatchFiles: String,
     val labelSignatureDuplicateSplitNames: String,
     val labelSignatureSchemes: String,
+    val labelSignatureDeclaredSchemes: String,
     val labelSignatureCertificate: String,
     val labelSignatureCurrentCertificate: String,
     val labelSignatureCertificateLineage: String,
@@ -60,11 +64,8 @@ data class InstallNoticeResources(
     // Color
     val errorColor: Color,
     val tertiaryColor: Color,
-    val primaryColor: Color
+    val primaryColor: Color,
 )
 
 // Return type containing the list and the button ID
-data class InstallStateResult(
-    val notices: List<NoticeModel>,
-    val buttonTextId: Int
-)
+data class InstallStateResult(val notices: List<NoticeModel>, val buttonTextId: Int)

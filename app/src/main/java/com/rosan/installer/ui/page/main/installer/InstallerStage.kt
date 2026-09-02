@@ -4,6 +4,7 @@ package com.rosan.installer.ui.page.main.installer
 
 import android.graphics.Bitmap
 import com.rosan.installer.domain.archive.model.UnarchiveStatus
+import com.rosan.installer.domain.engine.model.install.InstallPhase
 import com.rosan.installer.domain.session.model.ConfirmationRequestType
 import com.rosan.installer.domain.session.model.InstallResult
 
@@ -23,7 +24,7 @@ sealed interface InstallerStage {
     data object InstallPrepare : InstallerStage
     data object InstallExtendedMenu : InstallerStage
     data object InstallExtendedSubMenu : InstallerStage
-    data class Installing(val progress: Float, val current: Int, val total: Int, val appLabel: String?) : InstallerStage
+    data class Installing(val progress: Float, val current: Int, val total: Int, val appLabel: String?, val phase: InstallPhase) : InstallerStage
     data class InstallingModule(val output: List<String>, val isFinished: Boolean = false) : InstallerStage
     data object InstallWaitingUnknownSource : InstallerStage
     data object InstallSuccess : InstallerStage
@@ -38,7 +39,7 @@ sealed interface InstallerStage {
         val isSelfSession: Boolean,
         val isOwnershipConflict: Boolean,
         val sourceAppLabel: CharSequence?,
-        val requestType: ConfirmationRequestType
+        val requestType: ConfirmationRequestType,
     ) : InstallerStage
 
     data object UninstallReady : InstallerStage
@@ -47,19 +48,11 @@ sealed interface InstallerStage {
     data object UninstallSuccess : InstallerStage
     data object UninstallFailed : InstallerStage
 
-    data class UnarchiveReady(
-        val packageName: String,
-        val appLabel: CharSequence,
-        val installerLabel: CharSequence
-    ) : InstallerStage
+    data class UnarchiveReady(val packageName: String, val appLabel: CharSequence, val installerLabel: CharSequence) : InstallerStage
 
     data object Unarchiving : InstallerStage
 
-    data class UnarchiveError(
-        val status: UnarchiveStatus,
-        val requiredBytes: Long,
-        val installerLabel: CharSequence?
-    ) : InstallerStage
+    data class UnarchiveError(val status: UnarchiveStatus, val requiredBytes: Long, val installerLabel: CharSequence?) : InstallerStage
 
     data object UnarchiveFailed : InstallerStage
 }

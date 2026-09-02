@@ -4,12 +4,15 @@ package com.rosan.installer.data.engine.parser.strategy
 
 import android.graphics.drawable.Drawable
 import com.rosan.installer.data.engine.parser.ApkParser
+import com.rosan.installer.data.engine.parser.UnifiedZipFile
 import com.rosan.installer.data.engine.parser.parseSplitMetadata
 import com.rosan.installer.data.engine.signature.PendingApkSignatureAnalyzer
 import com.rosan.installer.domain.engine.model.AnalyseExtraEntity
 import com.rosan.installer.domain.engine.model.packageinfo.AppEntity
+import com.rosan.installer.domain.engine.model.packageinfo.AppSignatureInfo
 import com.rosan.installer.domain.engine.model.source.DataEntity
 import com.rosan.installer.domain.settings.model.config.ConfigModel
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -24,44 +27,47 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
-import java.io.File
-import java.util.zip.ZipFile
 
 class XApkStrategy(
     private val json: Json,
     // Inject ApkParser to handle fallback analysis for Base APK
     private val apkParser: ApkParser,
-    private val pendingApkSignatureAnalyzer: PendingApkSignatureAnalyzer
+    private val pendingApkSignatureAnalyzer: PendingApkSignatureAnalyzer,
 ) : AnalysisStrategy {
 
     @OptIn(ExperimentalSerializationApi::class)
     override suspend fun analyze(
         config: ConfigModel,
         data: DataEntity,
-        zipFile: ZipFile?,
-        extra: AnalyseExtraEntity
+        zipFile: UnifiedZipFile?,
+        extra: AnalyseExtraEntity,
     ): List<AppEntity> {
-        requireNotNull(zipFile)
+        val archive = requireNotNull(zipFile)
         require(data is DataEntity.FileEntity)
+        val checkSignatures = extra.shouldCheckAppSignatures()
+        val baseExtra = if (checkSignatures) extra else extra.copy(checkAppSignature = false)
 
         // 1. Parse Manifest
-        val manifestEntry = zipFile.getEntry("manifest.json") ?: return emptyList()
+        val manifestEntry = archive.getEntry("manifest.json") ?: return emptyList()
         val manifest = withContext(Dispatchers.IO) {
-            zipFile.getInputStream(manifestEntry)
+            archive.openEntry(manifestEntry)
         }.use {
             json.decodeFromStream<Manifest>(it)
         }
 
         // 2. Load Icon (if available)
-        val icon = zipFile.getEntry("icon.png")?.let {
-            Drawable.createFromStream(zipFile.getInputStream(it), it.name)
+        val icon = archive.getEntry("icon.png")?.let { entry ->
+            archive.openEntry(entry).use { input ->
+                Drawable.createFromStream(input, entry.name)
+            }
         }
 
         // 3. Map Splits to Entities
         return manifest.splits.flatMap { split ->
             val entryName = split.name
             // Construct the virtual data entity for the entry
-            val entryData = DataEntity.ZipFileEntity(entryName, data)
+            val entry = archive.getEntry(entryName) ?: return@flatMap emptyList()
+            val entryData = archive.toDataEntity(entry, data)
 
             val file = File(entryName)
             when (file.extension) {
@@ -82,37 +88,44 @@ class XApkStrategy(
                             type = metadata.type,
                             filterType = metadata.filterType,
                             configValue = metadata.configValue,
-                            signatureInfo = if (extra.checkAppSignature) {
+                            signatureInfo = if (checkSignatures) {
                                 pendingApkSignatureAnalyzer.analyze(entryData, extra.cacheDirectory)
                             } else {
                                 null
-                            }
+                            },
                         )
                     } else {
                         // Handle Base APK
                         var resolvedLabel = manifest.label
                         var resolvedIcon = icon
-                        val signatureInfo = if (extra.checkAppSignature) {
-                            pendingApkSignatureAnalyzer.analyze(entryData, extra.cacheDirectory)
-                        } else {
-                            null
-                        }
+                        var signatureInfo: AppSignatureInfo? = null
 
                         // Fallback: If label is missing from JSON, parse the Base APK fully to extract it
                         if (resolvedLabel.isNullOrBlank()) {
-                            val baseEntry = zipFile.getEntry(entryName)
-                            if (baseEntry != null) {
-                                val parsedEntities = apkParser.parseZipEntryFull(zipFile, baseEntry, data, extra)
-                                val parsedBase = parsedEntities.firstOrNull { it is AppEntity.BaseEntity } as? AppEntity.BaseEntity
+                            val parsedEntities = apkParser.parseArchiveEntryFull(archive, entry, data, baseExtra)
+                            val parsedBase = parsedEntities.firstOrNull { it is AppEntity.BaseEntity } as? AppEntity.BaseEntity
 
-                                if (parsedBase != null) {
-                                    resolvedLabel = parsedBase.label
-                                    // Optionally fallback the icon as well if missing from zip root
-                                    if (resolvedIcon == null) {
-                                        resolvedIcon = parsedBase.icon
-                                    }
+                            if (parsedBase != null) {
+                                resolvedLabel = parsedBase.label
+                                // Optionally fallback the icon as well if missing from zip root
+                                if (resolvedIcon == null) {
+                                    resolvedIcon = parsedBase.icon
+                                }
+                                signatureInfo = parsedBase.signatureInfo
+                                // XAPK keeps the original entry entity for installation. A temporary
+                                // APK created solely for label/icon analysis is no longer needed.
+                                val parsedData = parsedBase.data
+                                if (parsedData is DataEntity.FileEntity &&
+                                    parsedData !is DataEntity.FileDescriptorEntity &&
+                                    parsedData.source === entryData
+                                ) {
+                                    File(parsedData.path).delete()
                                 }
                             }
+                        }
+
+                        if (signatureInfo == null && checkSignatures) {
+                            signatureInfo = pendingApkSignatureAnalyzer.analyze(entryData, extra.cacheDirectory)
                         }
 
                         AppEntity.BaseEntity(
@@ -127,7 +140,7 @@ class XApkStrategy(
                             minSdk = manifest.minSdk,
                             sourceType = extra.dataType,
                             signatureHash = signatureInfo?.primarySha256,
-                            signatureInfo = signatureInfo
+                            signatureInfo = signatureInfo,
                         )
                     }
                     listOf(entity)
@@ -143,10 +156,12 @@ class XApkStrategy(
                                 dmName = dmName,
                                 targetSdk = manifest.targetSdk,
                                 minSdk = manifest.minSdk,
-                                sourceType = extra.dataType
-                            )
+                                sourceType = extra.dataType,
+                            ),
                         )
-                    } else emptyList()
+                    } else {
+                        emptyList()
+                    }
                 }
 
                 else -> emptyList()
@@ -169,10 +184,7 @@ class XApkStrategy(
         val versionName: String = versionNameStr ?: ""
 
         @Serializable
-        data class Split(
-            @SerialName("file") val name: String,
-            @SerialName("id") val splitName: String
-        )
+        data class Split(@SerialName("file") val name: String, @SerialName("id") val splitName: String)
     }
 }
 
@@ -180,18 +192,15 @@ private object FlexibleXapkVersionCodeSerializer : KSerializer<Long> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("FlexibleXapkVersionCode", PrimitiveKind.LONG)
 
-    override fun serialize(encoder: Encoder, value: Long) =
-        encoder.encodeLong(value)
+    override fun serialize(encoder: Encoder, value: Long) = encoder.encodeLong(value)
 
-    override fun deserialize(decoder: Decoder): Long {
-        return try {
-            decoder.decodeLong()
-        } catch (_: Exception) {
-            try {
-                decoder.decodeString().toLong()
-            } catch (e: Exception) {
-                throw SerializationException("Expected string or number for XAPK version_code", e)
-            }
+    override fun deserialize(decoder: Decoder): Long = try {
+        decoder.decodeLong()
+    } catch (_: Exception) {
+        try {
+            decoder.decodeString().toLong()
+        } catch (e: Exception) {
+            throw SerializationException("Expected string or number for XAPK version_code", e)
         }
     }
 }

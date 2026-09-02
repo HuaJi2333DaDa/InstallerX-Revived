@@ -7,11 +7,14 @@ package com.rosan.installer.ui.page.main.settings.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.layout.size
@@ -37,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -65,7 +70,7 @@ fun HomePage(
     title: String,
     outerPadding: PaddingValues,
     configCount: Int = 0,
-    onNavigateToProfiles: () -> Unit = {}
+    onNavigateToProfiles: () -> Unit = {},
 ) {
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
@@ -88,30 +93,30 @@ fun HomePage(
                 title = {
                     Text(
                         text = title,
-                        modifier = Modifier.padding(start = 12.dp)
+                        modifier = Modifier.padding(start = 12.dp),
                     )
                 },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backdrop.getMaterial3AppBarColor(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    scrolledContainerColor = backdrop.getMaterial3AppBarColor()
-                )
+                    scrolledContainerColor = backdrop.getMaterial3AppBarColor(),
+                ),
             )
-        }
+        },
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
-            contentPadding = PaddingValues(16.dp) + paddingValues + outerPadding
+            contentPadding = PaddingValues(16.dp) + paddingValues + outerPadding,
         ) {
             item {
                 InstallerStatusCard(
                     isActive = uiState.isDefaultInstaller,
                     isSystemApp = uiState.isSystemApp,
                     useBlur = useBlur,
-                    onClick = { navigator.push(Route.DefaultInstaller) }
+                    onClick = { navigator.push(Route.DefaultInstaller) },
                 )
             }
 
@@ -119,22 +124,24 @@ fun HomePage(
 
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     StatCard(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                         title = stringResource(R.string.home_stat_authorizers),
                         value = uiState.availableAuthorizerCount.toString(),
                         containerColor = MaterialTheme.colorScheme.surfaceBright,
-                        onClick = { navigator.push(Route.Priv) }
+                        onClick = { navigator.push(Route.Priv) },
                     )
                     StatCard(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                         title = stringResource(R.string.home_stat_profiles),
                         value = configCount.toString(),
                         containerColor = MaterialTheme.colorScheme.surfaceBright,
-                        onClick = onNavigateToProfiles
+                        onClick = onNavigateToProfiles,
                     )
                 }
             }
@@ -142,25 +149,33 @@ fun HomePage(
             item {
                 SegmentedColumn(
                     title = stringResource(R.string.home_device_info_title),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 8.dp)
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 8.dp),
                 ) {
                     item {
                         BaseWidget(
                             title = stringResource(R.string.home_device_info_model),
                             description = uiState.deviceName,
-                            iconPlaceholder = false
+                            iconPlaceholder = false,
                         )
                     }
                     item {
                         BaseWidget(
                             title = stringResource(R.string.home_device_info_system),
                             description = DeviceConfig.systemVersion,
-                            iconPlaceholder = false
+                            iconPlaceholder = false,
                         )
                     }
                     item {
+                        val isCustomizeAuthorizer = uiState.globalAuthorizer == Authorizer.Customize
                         val authorizerText = when {
+                            isCustomizeAuthorizer ->
+                                uiState.customizeAuthorizer
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { stringResource(R.string.config_authorizer_command_desc, it) }
+                                    ?: stringResource(R.string.config_authorizer_customize)
+
                             uiState.isSystemApp -> stringResource(R.string.working_status_system_installer)
+
                             uiState.globalAuthorizer == Authorizer.Shizuku -> {
                                 stringResource(R.string.config_authorizer_shizuku) + " " + when {
                                     uiState.shizukuAuthorized -> "(${uiState.shizukuMode.desc})"
@@ -172,7 +187,9 @@ fun HomePage(
                             uiState.globalAuthorizer == Authorizer.Root -> {
                                 stringResource(R.string.config_authorizer_root) + " " + if (uiState.rootMode != RootMode.None) {
                                     "(${uiState.rootMode.name})"
-                                } else "(${stringResource(R.string.unavailable)})"
+                                } else {
+                                    "(${stringResource(R.string.unavailable)})"
+                                }
                             }
 
                             uiState.globalAuthorizer == Authorizer.Dhizuku -> {
@@ -188,14 +205,21 @@ fun HomePage(
                         BaseWidget(
                             title = stringResource(R.string.home_device_info_active_authorizer),
                             description = authorizerText,
-                            iconPlaceholder = false
+                            descriptionStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = if (isCustomizeAuthorizer && uiState.customizeAuthorizer.isNotBlank()) {
+                                    FontFamily.Monospace
+                                } else {
+                                    null
+                                },
+                            ),
+                            iconPlaceholder = false,
                         )
                     }
                     item {
                         BaseWidget(
                             title = stringResource(R.string.home_device_info_default_installer),
                             description = uiState.defaultInstaller,
-                            iconPlaceholder = false
+                            iconPlaceholder = false,
                         )
                     }
                 }
@@ -203,14 +227,14 @@ fun HomePage(
             item {
                 SegmentedColumn(
                     title = stringResource(R.string.home_learn_more_title),
-                    contentPadding = PaddingValues(top = 16.dp)
+                    contentPadding = PaddingValues(top = 16.dp),
                 ) {
                     item {
                         BaseWidget(
                             iconPlaceholder = false,
                             title = stringResource(R.string.home_learn_more_installerx_title),
                             description = stringResource(R.string.home_learn_more_installerx_desc),
-                            onClick = { uriHandler.openUri("https://wxxsfxyzm.github.io/InstallerX-Revived-Website/") }
+                            onClick = { uriHandler.openUri("https://wxxsfxyzm.github.io/InstallerX-Revived-Website/") },
                         )
                     }
                 }
@@ -225,29 +249,31 @@ private fun StatCard(
     title: String,
     value: String,
     containerColor: Color,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
 ) {
     ElevatedCard(
         onClick = onClick,
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        colors = CardDefaults.cardColors(containerColor = containerColor),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
+                modifier = Modifier.fillMaxWidth(),
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
     }
@@ -258,7 +284,7 @@ private fun InstallerStatusCard(
     isActive: Boolean,
     isSystemApp: Boolean = false,
     useBlur: Boolean = false,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
 ) {
     val displayAsActive = isActive || isSystemApp
 
@@ -296,7 +322,7 @@ private fun InstallerStatusCard(
                 containerColor.copy(alpha = 0.15f)
             } else {
                 containerColor
-            }
+            },
         ),
         elevation = if (useBlur) {
             CardDefaults.elevatedCardElevation(
@@ -304,26 +330,26 @@ private fun InstallerStatusCard(
                 pressedElevation = 0.dp,
                 focusedElevation = 0.dp,
                 hoveredElevation = 0.dp,
-                draggedElevation = 0.dp
+                draggedElevation = 0.dp,
             )
         } else {
             CardDefaults.elevatedCardElevation()
-        }
+        },
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             AnimatedFluidBackground(
                 baseColor = containerColor,
                 enabled = useBlur && displayAsActive,
-                modifier = Modifier.matchParentSize()
+                modifier = Modifier.matchParentSize(),
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     imageVector = icon,
@@ -335,7 +361,7 @@ private fun InstallerStatusCard(
                 )
 
                 Column(
-                    modifier = Modifier.padding(start = 20.dp)
+                    modifier = Modifier.padding(start = 20.dp),
                 ) {
                     Text(
                         text = stringResource(titleRes),
@@ -357,7 +383,7 @@ private fun InstallerStatusCard(
 @Composable
 private fun PreviewOfInstallerStatusCard(isActive: Boolean) {
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Authorizer.entries.forEach { _ ->
             item {

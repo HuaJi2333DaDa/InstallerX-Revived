@@ -4,26 +4,22 @@ package com.rosan.installer.domain.settings.model.preferences
 
 import com.rosan.installer.domain.settings.model.config.Authorizer
 
-data class SmartAuthorizerCandidate(
-    val authorizer: Authorizer,
-    val enabled: Boolean
-)
+data class SmartAuthorizerCandidate(val authorizer: Authorizer, val enabled: Boolean)
 
 object SmartAuthorizerPreferences {
     private val supportedAuthorizers = listOf(
         Authorizer.Root,
         Authorizer.Shizuku,
         Authorizer.Dhizuku,
-        Authorizer.None
+        Authorizer.None,
     )
 
-    fun defaultCandidates(isSystemApp: Boolean): List<SmartAuthorizerCandidate> =
-        supportedAuthorizers
-            .filter { it != Authorizer.None || isSystemApp }
-            .map { SmartAuthorizerCandidate(authorizer = it, enabled = true) }
+    fun defaultCandidates(isSessionInstallSupported: Boolean): List<SmartAuthorizerCandidate> = supportedAuthorizers
+        .filter { it != Authorizer.None || isSessionInstallSupported }
+        .map { SmartAuthorizerCandidate(authorizer = it, enabled = true) }
 
-    fun decode(value: String, isSystemApp: Boolean): List<SmartAuthorizerCandidate> {
-        if (value.isBlank()) return defaultCandidates(isSystemApp)
+    fun decode(value: String, isSessionInstallSupported: Boolean): List<SmartAuthorizerCandidate> {
+        if (value.isBlank()) return defaultCandidates(isSessionInstallSupported)
 
         val parsed = value
             .split(',')
@@ -34,25 +30,24 @@ object SmartAuthorizerPreferences {
 
                 SmartAuthorizerCandidate(
                     authorizer = authorizer,
-                    enabled = parts.getOrNull(1) != "0"
+                    enabled = parts.getOrNull(1) != "0",
                 )
             }
             .distinctBy { it.authorizer }
-            .filter { it.authorizer != Authorizer.None || isSystemApp }
+            .filter { it.authorizer != Authorizer.None || isSessionInstallSupported }
 
-        if (parsed.isEmpty()) return defaultCandidates(isSystemApp)
+        if (parsed.isEmpty()) return defaultCandidates(isSessionInstallSupported)
 
-        val missing = defaultCandidates(isSystemApp)
+        val missing = defaultCandidates(isSessionInstallSupported)
             .filterNot { candidate -> parsed.any { it.authorizer == candidate.authorizer } }
 
         return parsed + missing
     }
 
-    fun encode(candidates: List<SmartAuthorizerCandidate>): String =
-        candidates
-            .filter { it.authorizer in supportedAuthorizers }
-            .distinctBy { it.authorizer }
-            .joinToString(",") { candidate ->
-                "${candidate.authorizer.value}:${if (candidate.enabled) "1" else "0"}"
-            }
+    fun encode(candidates: List<SmartAuthorizerCandidate>): String = candidates
+        .filter { it.authorizer in supportedAuthorizers }
+        .distinctBy { it.authorizer }
+        .joinToString(",") { candidate ->
+            "${candidate.authorizer.value}:${if (candidate.enabled) "1" else "0"}"
+        }
 }

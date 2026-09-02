@@ -9,8 +9,14 @@ data class AppSignatureInfo(
     val signingCertificateHistory: List<SignatureCertificateInfo> = emptyList(),
     val hasMultipleSigners: Boolean = false,
     val verifiedSchemes: List<String> = emptyList(),
+    val declaredSchemes: List<String> = emptyList(),
+    val verificationStatus: SignatureVerificationStatus = if (verified) {
+        SignatureVerificationStatus.VERIFIED
+    } else {
+        SignatureVerificationStatus.FAILED
+    },
     val warnings: List<String> = emptyList(),
-    val errors: List<String> = emptyList()
+    val errors: List<String> = emptyList(),
 ) {
     val primarySha256: String?
         get() = certificates.firstOrNull()?.sha256 ?: signerSha256Set.firstOrNull()
@@ -25,6 +31,12 @@ data class AppSignatureInfo(
         }
 }
 
+enum class SignatureVerificationStatus {
+    VERIFIED,
+    FAILED,
+    SIGNING_BLOCK_ONLY,
+}
+
 data class SignatureCertificateInfo(
     val sha256: String,
     val sha1: String,
@@ -34,5 +46,5 @@ data class SignatureCertificateInfo(
     val validFrom: String?,
     val validUntil: String?,
     val publicKeyAlgorithm: String?,
-    val signatureAlgorithm: String?
+    val signatureAlgorithm: String?,
 )

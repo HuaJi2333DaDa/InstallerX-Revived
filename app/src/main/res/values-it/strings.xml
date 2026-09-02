@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="agree">Accetta</string>
     <string name="open_source_license">Licenza Open Source</string>
     <string name="back">Indietro</string>
     <string name="config">Profili</string>
@@ -14,14 +13,10 @@
     <string name="update_available">Aggiornamento Disponibile: %1$s</string>
     <string name="stable">Stabile</string>
     <string name="preview">Anteprima</string>
-    <string name="agreement_title">Informativa</string>
-    <string name="user_terms">Condizioni d’uso</string>
-    <string name="privacy_policy">Informativa sulla privacy</string>
     <string name="warning">Avviso</string>
     <string name="open_source_license_settings_description">Visualizza le librerie open-source di terze parti e le relative licenze</string>
     <string name="home">Home</string>
     <string name="about">Informazioni</string>
-    <string name="performance">Prestazioni</string>
     <string name="lab">Laboratorio</string>
     <string name="lab_desc">Accedi alle funzionalità sperimentali e per sviluppatori</string>
     <string name="debug">Debug</string>
@@ -42,11 +37,6 @@
     <string name="unstable">Instabile</string>
     <string name="enable_notification_hint">Abilita le autorizzazioni per le notifiche per poter installare!</string>
     <string name="enable_storage_permission_hint">Abilita l’accesso a tutti i file per poter installare!</string>
-    <string name="discuss">Chat, feedback e update</string>
-    <string name="telegram_group">Gruppo Telegram</string>
-    <string name="telegram_group_desc">Unisciti al gruppo!</string>
-    <string name="telegram_channel">Canale Telegram</string>
-    <string name="telegram_channel_desc">Unisciti al canale per ricevere notizie e aggiornamenti!</string>
     <string name="theme_settings">Impostazioni tema</string>
     <string name="theme_settings_ui_style">Stile dell’interfaccia</string>
     <string name="theme_settings_desc">Cambia il tema dell’app</string>
@@ -55,9 +45,35 @@
     <string name="theme_settings_miuix_custom_colors">Colori personalizzati</string>
     <string name="theme_settings_miuix_custom_colors_desc">Personalizza i colori del tema in stile Miuix</string>
     <string name="theme_settings_google_ui">Google Material 3</string>
-    <string name="app">App</string>
     <string name="theme_settings_google_ui_desc">Interfaccia Material Design Standard</string>
     <string name="theme_settings_ui_engine">Motore Interfaccia</string>
-    <string name="theme_settings_use_expressive_ui">Utilizza Interfaccia Expressive</string>
-    <string name="theme_settings_use_expressive_ui_desc">Usa il nuovo stile Expressive M3</string>
+    <string name="inactivate">Disattiva</string>
+    <string name="history_status_success">Successo</string>
+    <string name="home_stat_authorizers">Privilegi Disponibili</string>
+    <string name="history_clear">Elimina cronologia</string>
+    <string name="dhizuku_not_authorized">Concedi il permesso di accedere a Dhizuku</string>
+    <string name="working_status_not_default_installer_click_details">Clicca per vedere i dettagli</string>
+    <string name="history_clear_confirm_title">Eliminare la conologia?</string>
+    <string name="history_operation_session_confirm">Sessione</string>
+    <string name="unavailable">Non disponibile</string>
+    <string name="history_operation_install">Installa</string>
+    <string name="shizuku_not_available">Attiva Sui o Shizuku</string>
+    <string name="home_label_lsp_link">Cerchi un modulo?</string>
+    <string name="working_status_default_installer">Impostato come installer predefinito</string>
+    <string name="dhizuku_not_available">Attiva Dhizuku</string>
+    <string name="shizuku_not_authorized">Concedi il permesso di accedere a Sui o Shizuku</string>
+    <string name="home_stat_profiles">Profili</string>
+    <string name="history_clear_confirm_desc">Tutti i dati di installazione e disinstallazione verranno eliminati. Non è possibile annullare l\'operazione.</string>
+    <string name="history_operation_uninstall">Disinstalla</string>
+    <string name="setting_lsposed_module_title">Modulo Vector Abilitato</string>
+    <string name="history">Cronologia</string>
+    <string name="history_status_failed">Fallito</string>
+    <string name="available">Disponibile</string>
+    <string name="working_status_not_default_installer">Non impostato come installer predefinito</string>
+    <string name="running">In esecuzione</string>
+    <string name="activate">Attiva</string>
+    <string name="working_status_default_installer_desc">L\'app è attualmente l\'installatore pacchetti predefinito</string>
+    <string name="working_status_system_installer">Funziona come installatore di pacchetti di sistema</string>
+    <string name="working_status_none_authorizer_desc">Non fa uso di alcun privilegio, il permesso origini sconosciute è richiesto per installare le app.</string>
+    <string name="working_status_default_installer_tip">Imposta questa app come programma di installazione di pacchetti predefinito per gestire la maggior parte delle richieste di installazione. Si noti che i seguenti casi non possono essere intercettati:\n- L\'OEM impedisce la modifica del programma di installazione predefinito\n- L\'iniziatore specifica un componente di destinazione\n- L\'iniziatore utilizza un\'installazione di sessione</string>
 </resources>

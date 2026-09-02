@@ -44,13 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rosan.installer.R
-import com.rosan.installer.core.env.DeviceConfig
 import com.rosan.installer.core.device.model.Manufacturer
+import com.rosan.installer.core.env.DeviceConfig
+import com.rosan.installer.domain.engine.model.install.sourcePath
 import com.rosan.installer.domain.engine.model.packageinfo.AppEntity
-import com.rosan.installer.domain.engine.model.source.DataType
 import com.rosan.installer.domain.engine.model.packageinfo.InstalledAppInfo
 import com.rosan.installer.domain.engine.model.packageinfo.sortedBest
-import com.rosan.installer.domain.engine.model.install.sourcePath
+import com.rosan.installer.domain.engine.model.source.DataType
 import com.rosan.installer.domain.engine.usecase.AnalyzeInstallStateUseCase
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.ui.icons.AppIcons
@@ -86,7 +86,7 @@ fun InstallPrepareContent(
     appInfo: AppInfoState,
     onCancel: () -> Unit,
     onInstall: () -> Unit,
-    onLongInstall: () -> Unit
+    onLongInstall: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -133,9 +133,9 @@ fun InstallPrepareContent(
     val isModuleSelected = selectedEntities.any { it is AppEntity.ModuleEntity }
     val isPureSplit = primaryEntity is AppEntity.SplitEntity
     val isBundleSplitUpdate = primaryEntity is AppEntity.BaseEntity &&
-            entityToInstall == null &&
-            selectedEntities.isNotEmpty() &&
-            !isModuleSelected
+        entityToInstall == null &&
+        selectedEntities.isNotEmpty() &&
+        !isModuleSelected
     val isSplitUpdateMode = (isBundleSplitUpdate || isPureSplit) && currentPackage.installedAppInfo != null
 
     val primaryColor = MiuixTheme.colorScheme.primary
@@ -155,6 +155,10 @@ fun InstallPrepareContent(
     val sigMismatchWarning = stringResource(R.string.installer_prepare_signature_mismatch)
     val sigUnknownWarning = stringResource(R.string.installer_prepare_signature_unknown)
     val sigAnalysisIssue = stringResource(R.string.installer_prepare_signature_analysis_issue)
+    val sigSigningBlockNotInstalled =
+        stringResource(R.string.installer_prepare_signature_signing_block_not_installed)
+    val sigSigningBlockMatch = stringResource(R.string.installer_prepare_signature_signing_block_match)
+    val sigSigningBlockUnknown = stringResource(R.string.installer_prepare_signature_signing_block_unknown)
     val labelPendingSignature = stringResource(R.string.installer_signature_pending_package)
     val labelInstalledSignature = stringResource(R.string.installer_signature_installed_package)
     val labelSignatureAnalysisIssues = stringResource(R.string.installer_signature_analysis_issues)
@@ -162,6 +166,7 @@ fun InstallPrepareContent(
     val labelSignatureSplitMismatchFiles = stringResource(R.string.installer_signature_split_mismatch_files)
     val labelSignatureDuplicateSplitNames = stringResource(R.string.installer_signature_duplicate_split_names)
     val labelSignatureSchemes = stringResource(R.string.installer_signature_schemes)
+    val labelSignatureDeclaredSchemes = stringResource(R.string.installer_signature_declared_schemes)
     val labelSignatureCertificate = stringResource(R.string.installer_signature_certificate)
     val labelSignatureCurrentCertificate = stringResource(R.string.installer_signature_current_certificate)
     val labelSignatureCertificateLineage = stringResource(R.string.installer_signature_certificate_lineage)
@@ -205,6 +210,9 @@ fun InstallPrepareContent(
             textSigMismatch = sigMismatchWarning,
             textSigUnknown = sigUnknownWarning,
             textSigAnalysisIssue = sigAnalysisIssue,
+            textSigSigningBlockNotInstalled = sigSigningBlockNotInstalled,
+            textSigSigningBlockMatch = sigSigningBlockMatch,
+            textSigSigningBlockUnknown = sigSigningBlockUnknown,
             labelPendingSignature = labelPendingSignature,
             labelInstalledSignature = labelInstalledSignature,
             labelSignatureAnalysisIssues = labelSignatureAnalysisIssues,
@@ -212,6 +220,7 @@ fun InstallPrepareContent(
             labelSignatureSplitMismatchFiles = labelSignatureSplitMismatchFiles,
             labelSignatureDuplicateSplitNames = labelSignatureDuplicateSplitNames,
             labelSignatureSchemes = labelSignatureSchemes,
+            labelSignatureDeclaredSchemes = labelSignatureDeclaredSchemes,
             labelSignatureCertificate = labelSignatureCertificate,
             labelSignatureCurrentCertificate = labelSignatureCurrentCertificate,
             labelSignatureCertificateLineage = labelSignatureCertificateLineage,
@@ -241,7 +250,7 @@ fun InstallPrepareContent(
             labelXposedTargetApi = labelXposedTargetApi,
             errorColor = errorColor,
             tertiaryColor = primaryColor,
-            primaryColor = primaryColor
+            primaryColor = primaryColor,
         )
     }
 
@@ -254,16 +263,17 @@ fun InstallPrepareContent(
     }
 
     // Execute domain logic and map to UI state within the remember block
+    val checkAppSignature = settings.checkAppSignature
     val installStateResult = remember(
         currentPackage,
         entityToInstall,
         isSplitUpdateMode,
         containerType,
-        settings.checkAppSignature,
+        checkAppSignature,
         settings.showSignatureInfoOnMatch,
         settings.showSignatureDetails,
         settings.detectXposedModule,
-        installStateUiMapper
+        installStateUiMapper,
     ) {
         // 1. Get pure domain state
         val domainState = analyzeInstallStateUseCase(
@@ -274,10 +284,10 @@ fun InstallPrepareContent(
             containerType = containerType,
             systemArch = DeviceConfig.currentArchitecture,
             systemSdkInt = Build.VERSION.SDK_INT,
-            checkAppSignature = settings.checkAppSignature,
+            checkAppSignature = checkAppSignature,
             showSignatureInfoOnMatch = settings.showSignatureInfoOnMatch,
             showSignatureDetails = settings.showSignatureDetails,
-            detectXposedModule = settings.detectXposedModule
+            detectXposedModule = settings.detectXposedModule,
         )
 
         // 2. Map to UI state
@@ -287,23 +297,26 @@ fun InstallPrepareContent(
     val buttonTextId = installStateResult.buttonTextId
 
     LazyColumn(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         item {
             AppInfoSlot(
                 appInfo = appInfo,
-                onIconClick = {
-                    // Trigger the share action using the already resolved primaryEntity
-                    if (settings.labTapIconToShare)
+                onIconClick = if (settings.labTapIconToShare) {
+                    {
+                        // Trigger the share action using the already resolved primaryEntity
                         viewModel.dispatch(InstallerViewAction.ShareApp(primaryEntity))
-                }
+                    }
+                } else {
+                    null
+                },
             )
         }
         item { Spacer(modifier = Modifier.height(4.dp)) }
         item {
             MiuixInfoChipGroup(
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-                notices = notices
+                notices = notices,
             )
         }
         item {
@@ -311,11 +324,11 @@ fun InstallPrepareContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 6.dp),
-                colors = miuixSheetCardColors()
+                colors = miuixSheetCardColors(),
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     when (primaryEntity) {
                         is AppEntity.BaseEntity -> {
@@ -324,19 +337,22 @@ fun InstallPrepareContent(
                                 newValue = primaryEntity.versionName,
                                 oldValue = currentPackage.installedAppInfo?.versionName,
                                 isUninstalled = currentPackage.installedAppInfo?.isUninstalled ?: false,
-                                isArchived = currentPackage.installedAppInfo?.isArchived ?: false
+                                isArchived = currentPackage.installedAppInfo?.isArchived ?: false,
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
                             AdaptiveInfoRow(
                                 labelResId = R.string.installer_version_code_label,
                                 newValue = primaryEntity.versionCode.toString(),
                                 oldValue = currentPackage.installedAppInfo?.versionCode?.toString(),
                                 isUninstalled = currentPackage.installedAppInfo?.isUninstalled ?: false,
-                                isArchived = currentPackage.installedAppInfo?.isArchived ?: false
+                                isArchived = currentPackage.installedAppInfo?.isArchived ?: false,
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
                             SDKComparison(
                                 entityToInstall = primaryEntity,
                                 preInstallAppInfo = currentPackage.installedAppInfo,
-                                displaySDK = config.displaySdk
+                                displaySDK = config.displaySdk,
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
 
                             AnimatedVisibility(visible = config.displaySize && primaryEntity.size > 0) {
@@ -347,16 +363,17 @@ fun InstallPrepareContent(
                                 AdaptiveInfoRow(
                                     labelResId = R.string.installer_package_size_label,
                                     newValue = newSizeStr,
-                                    oldValue = oldSizeStr
+                                    oldValue = oldSizeStr,
+                                    hideIdenticalComparison = settings.hideIdenticalComparisons,
                                 )
                             }
 
                             val isOppoOrOnePlus = DeviceConfig.currentManufacturer == Manufacturer.OPPO ||
-                                    DeviceConfig.currentManufacturer == Manufacturer.ONEPLUS
+                                DeviceConfig.currentManufacturer == Manufacturer.ONEPLUS
                             val shouldShowOppoRow = isOppoOrOnePlus &&
-                                    settings.showOPPOSpecial &&
-                                    primaryEntity.sourceType == DataType.APK &&
-                                    primaryEntity.minOsdkVersion != null
+                                settings.showOPPOSpecial &&
+                                primaryEntity.sourceType == DataType.APK &&
+                                primaryEntity.minOsdkVersion != null
 
                             AnimatedVisibility(visible = shouldShowOppoRow) {
                                 // At this point, minOsdkVersion is guaranteed to be non-null
@@ -364,7 +381,7 @@ fun InstallPrepareContent(
                                     AdaptiveInfoRow(
                                         labelResId = R.string.installer_package_minOsdkVersion_label,
                                         newValue = version,
-                                        oldValue = null
+                                        oldValue = null,
                                     )
                                 }
                             }
@@ -375,18 +392,20 @@ fun InstallPrepareContent(
                             AdaptiveInfoRow(
                                 labelResId = R.string.installer_version_name_label,
                                 newValue = primaryEntity.version,
-                                oldValue = installedModuleInfo?.version
+                                oldValue = installedModuleInfo?.version,
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
                             AdaptiveInfoRow(
                                 labelResId = R.string.installer_version_code_label,
                                 newValue = primaryEntity.versionCode.toString(),
-                                oldValue = installedModuleInfo?.versionCode?.toString()
+                                oldValue = installedModuleInfo?.versionCode?.toString(),
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
                             AnimatedVisibility(visible = config.displaySdk) {
                                 AdaptiveInfoRow(
                                     labelResId = R.string.installer_module_author_label,
                                     newValue = primaryEntity.author,
-                                    oldValue = null
+                                    oldValue = null,
                                 )
                             }
                             AnimatedVisibility(visible = config.displaySize) {
@@ -394,7 +413,7 @@ fun InstallPrepareContent(
                                 AdaptiveInfoRow(
                                     labelResId = R.string.installer_package_size_label,
                                     newValue = newSizeStr,
-                                    oldValue = null
+                                    oldValue = null,
                                 )
                             }
                         }
@@ -404,14 +423,15 @@ fun InstallPrepareContent(
                             AdaptiveInfoRow(
                                 labelResId = R.string.installer_split_name_label,
                                 newValue = primaryEntity.splitName,
-                                oldValue = null
+                                oldValue = null,
                             )
 
                             // SDK Comparison (If splits define min/target SDK)
                             SDKComparison(
                                 entityToInstall = primaryEntity,
                                 preInstallAppInfo = currentPackage.installedAppInfo,
-                                displaySDK = config.displaySdk
+                                displaySDK = config.displaySdk,
+                                hideIdenticalComparison = settings.hideIdenticalComparisons,
                             )
 
                             // Size
@@ -420,7 +440,7 @@ fun InstallPrepareContent(
                                 AdaptiveInfoRow(
                                     labelResId = R.string.installer_package_size_label,
                                     newValue = newSizeStr,
-                                    oldValue = null // Don't compare with full app size, meaningless
+                                    oldValue = null, // Don't compare with full app size, meaningless
                                 )
                             }
                         }
@@ -435,33 +455,35 @@ fun InstallPrepareContent(
             AnimatedVisibility(
                 visible = (rawBaseEntity != null) && isExpanded,
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp),
-                    colors = miuixSheetCardColors()
+                    colors = miuixSheetCardColors(),
                 ) {
                     // Permissions List
-                    if (rawBaseEntity?.permissions?.isNotEmpty() == true)
+                    if (rawBaseEntity?.permissions?.isNotEmpty() == true) {
                         MiuixNavigationItemWidget(
                             title = stringResource(R.string.permission_list),
                             description = stringResource(R.string.permission_list_desc),
-                            //insideMargin = PaddingValues(12.dp),
+                            // insideMargin = PaddingValues(12.dp),
                             onClick = { viewModel.dispatch(InstallerViewAction.ShowMiuixPermissionList) },
                         )
+                    }
 
                     // Install Options
                     if (config.authorizer != Authorizer.Dhizuku &&
                         config.authorizer != Authorizer.None
-                    )
+                    ) {
                         MiuixNavigationItemWidget(
                             title = stringResource(R.string.config_label_install_options),
                             description = stringResource(R.string.config_label_install_options_desc),
-                            //insideMargin = PaddingValues(12.dp),
-                            onClick = { viewModel.dispatch(InstallerViewAction.InstallExtendedMenu) }
+                            // insideMargin = PaddingValues(12.dp),
+                            onClick = { viewModel.dispatch(InstallerViewAction.InstallExtendedMenu) },
                         )
+                    }
 
                     // Select Splits
                     val hasSplits = currentPackage.appEntities.size > 1
@@ -469,7 +491,7 @@ fun InstallPrepareContent(
                         MiuixNavigationItemWidget(
                             title = stringResource(R.string.installer_select_split),
                             description = stringResource(R.string.installer_select_split_desc),
-                            //insideMargin = PaddingValues(12.dp),
+                            // insideMargin = PaddingValues(12.dp),
                             onClick = { viewModel.dispatch(InstallerViewAction.InstallChoice) },
                         )
                     }
@@ -478,14 +500,14 @@ fun InstallPrepareContent(
         }
 
         val isInvalidSplitInstall = currentPackage.installedAppInfo == null &&
-                entityToInstall == null &&
-                selectedEntities.any { it is AppEntity.SplitEntity }
+            entityToInstall == null &&
+            selectedEntities.any { it is AppEntity.SplitEntity }
 
         item {
             AnimatedVisibility(
                 visible = isInvalidSplitInstall,
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
             ) {
                 MiuixInstallerTipCard(text = stringResource(R.string.installer_splits_invalid_tip))
             }
@@ -495,7 +517,7 @@ fun InstallPrepareContent(
             AnimatedVisibility(
                 visible = isSplitUpdateMode,
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
             ) {
                 MiuixInstallerTipCard(text = stringResource(R.string.installer_splits_only_tip))
             }
@@ -504,10 +526,10 @@ fun InstallPrepareContent(
         item {
             AnimatedVisibility(
                 visible = (primaryEntity is AppEntity.ModuleEntity) &&
-                        primaryEntity.description.isNotBlank() &&
-                        config.displaySdk,
+                    primaryEntity.description.isNotBlank() &&
+                    config.displaySdk,
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
             ) {
                 MiuixInstallerTipCard((primaryEntity as AppEntity.ModuleEntity).description)
             }
@@ -518,13 +540,13 @@ fun InstallPrepareContent(
             AnimatedVisibility(
                 visible = !isExpanded && (settings.labShowFilePath || settings.labShowInstallInitiator),
                 enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                exit = fadeOut() + shrinkVertically(),
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp),
-                    colors = miuixSheetCardColors()
+                    colors = miuixSheetCardColors(),
                 ) {
                     if (settings.labShowFilePath) {
                         // Safely extract the source path
@@ -547,7 +569,7 @@ fun InstallPrepareContent(
                                     clipboard.setClipEntry(clipData.toClipEntry())
                                     context.toast(R.string.copied_format, path)
                                 }
-                            }
+                            },
                         )
                     }
 
@@ -564,7 +586,7 @@ fun InstallPrepareContent(
                                     clipboard.setClipEntry(clipData.toClipEntry())
                                     context.toast(R.string.copied_format, initiator)
                                 }
-                            }
+                            },
                         )
                     }
                 }
@@ -622,28 +644,29 @@ fun InstallPrepareContent(
                     .navigationBarsPadding()
                     .padding(top = 24.dp, bottom = if (isGestureNavigation()) 24.dp else 0.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (showExpandButton)
+                if (showExpandButton) {
                     TextButton(
                         onClick = { isExpanded = !isExpanded },
                         text = if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.more),
                         colors = ButtonDefaults.textButtonColors(
                             color = if (isDynamicColor) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.secondaryVariant,
-                            textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant
+                            textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant,
                         ),
                         modifier = Modifier.weight(1f),
                     )
-                else
+                } else {
                     TextButton(
                         onClick = onCancel,
                         text = stringResource(R.string.cancel),
                         colors = ButtonDefaults.textButtonColors(
                             color = if (isDynamicColor) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.secondaryVariant,
-                            textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant
+                            textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant,
                         ),
                         modifier = Modifier.weight(1f),
                     )
+                }
                 TextButton(
                     onClick = {
                         // Only trigger normal install if long press didn't happen
@@ -653,7 +676,7 @@ fun InstallPrepareContent(
                     text = stringResource(buttonTextId),
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                     modifier = Modifier.weight(1f),
-                    interactionSource = interactionSource
+                    interactionSource = interactionSource,
                 )
             }
         }
@@ -664,12 +687,13 @@ fun InstallPrepareContent(
 private fun SDKComparison(
     entityToInstall: AppEntity,
     preInstallAppInfo: InstalledAppInfo?,
-    displaySDK: Boolean
+    displaySDK: Boolean,
+    hideIdenticalComparison: Boolean,
 ) {
     AnimatedVisibility(visible = displaySDK) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             // Target SDK
             entityToInstall.targetSdk?.let { newTargetSdk ->
@@ -678,7 +702,8 @@ private fun SDKComparison(
                     newSdk = newTargetSdk,
                     oldSdk = preInstallAppInfo?.targetSdk?.toString(),
                     isArchived = preInstallAppInfo?.isArchived ?: false,
-                    type = "target"
+                    hideIdenticalComparison = hideIdenticalComparison,
+                    type = "target",
                 )
             }
             // Min SDK
@@ -689,7 +714,8 @@ private fun SDKComparison(
                     oldSdk = preInstallAppInfo?.minSdk?.toString(),
                     isUninstalled = preInstallAppInfo?.isUninstalled ?: false,
                     isArchived = preInstallAppInfo?.isArchived ?: false,
-                    type = "min"
+                    hideIdenticalComparison = hideIdenticalComparison,
+                    type = "min",
                 )
             }
         }
@@ -703,22 +729,24 @@ private fun SdkInfoRow(
     oldSdk: String?,
     isUninstalled: Boolean = false,
     isArchived: Boolean = false,
-    type: String // "min" or "target"
+    hideIdenticalComparison: Boolean,
+    type: String, // "min" or "target"
 ) {
     val newSdkInt = newSdk.toIntOrNull()
     val oldSdkInt = oldSdk?.toIntOrNull()
-    val showComparison = oldSdkInt != null && newSdkInt != null && newSdkInt != oldSdkInt
+    val showComparison = oldSdkInt != null && newSdkInt != null &&
+        (!hideIdenticalComparison || newSdkInt != oldSdkInt)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Label to the left.
         Text(
             text = stringResource(labelResId),
             style = MiuixTheme.textStyles.body2,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
 
         // Label to the right.
@@ -742,7 +770,7 @@ private fun SdkInfoRow(
                     // tint = color,
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
-                        .size(16.dp)
+                        .size(16.dp),
                 )
 
                 Text(text = newSdk/*, color = color*/, style = MiuixTheme.textStyles.body2)

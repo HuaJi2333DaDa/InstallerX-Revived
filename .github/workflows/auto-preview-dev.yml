@@ -1,4 +1,4 @@
-name: Dev Branch Build & Artifact
+name: Branch CI
 
 on:
   push:
@@ -8,6 +8,11 @@ on:
       - 'renovate/**'
     paths:
       - 'app/**'
+      - 'app-process/**'
+      - 'baselineprofile/**'
+      - 'build-plugins/**'
+      - 'hidden-api/**'
+      - '.editorconfig'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle.properties'
@@ -16,6 +21,7 @@ on:
 
 jobs:
   pre_job:
+    name: Duplicate Check
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -33,9 +39,100 @@ jobs:
           # Optional: ignore certain paths (usually handled in on.push.paths)
           do_not_skip: '[]'
 
-  build_and_upload_artifact:
+  format_check:
+    name: Code Style
     needs: pre_job
     # Run only if should_skip is not true and commit message does not contain [skip dev]
+    if: |
+      needs.pre_job.outputs.should_skip != 'true' &&
+      !contains(github.event.head_commit.message, '[skip dev]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
+          build-scan-publish: false
+          cache-read-only: true
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Check code formatting
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew spotlessCheck --no-configuration-cache
+
+  unit_tests:
+    name: Unit Tests
+    needs: pre_job
+    # Run only if should_skip is not true and commit message does not contain [skip dev]
+    if: |
+      needs.pre_job.outputs.should_skip != 'true' &&
+      !contains(github.event.head_commit.message, '[skip dev]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Accept the terms of use to suppress the caching licensing warning
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
+          build-scan-publish: false
+          # Allow writing to cache for dev branch
+          cache-read-only: ${{ github.ref_name != 'dev' }}
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Run Unstable Debug Unit Tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew testUnstableDebugUnitTest --no-configuration-cache
+
+  build_and_upload_artifact:
+    name: Build Unstable Release APK & Magisk Module
+    needs:
+      - pre_job
+      - format_check
+      - unit_tests
+    # Build only after unit tests pass and the run is not skipped.
     if: |
       needs.pre_job.outputs.should_skip != 'true' &&
       !contains(github.event.head_commit.message, '[skip dev]')
@@ -55,7 +152,7 @@ jobs:
         run: echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: '25'
@@ -67,7 +164,7 @@ jobs:
           build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
           build-scan-terms-of-use-agree: "yes"
           build-scan-publish: false
-          # Allow writing to cache for dev branch
+          # Restore the cache populated by tests and update it on dev.
           cache-read-only: ${{ github.ref_name != 'dev' }}
           cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
 
@@ -95,22 +192,84 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew assembleOnlineUnstableRelease assembleOfflineUnstableRelease
+        run: ./gradlew assembleUnstableRelease --no-configuration-cache
 
-      # Upload the online variant unzipped APK
-      - name: Upload Online APK
+      - name: Create Magisk Module
+        run: |
+          echo "=> 正在创建 Magisk 模块目录结构..."
+          MODULE_DIR="magisk_module"
+          APP_DIR="$MODULE_DIR/system/product/priv-app/MIUIPackageInstaller"
+          mkdir -p "$APP_DIR"
+          
+          echo "=> 查找编译好的 Release APK 文件并重命名复制..."
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*.apk" | grep -i "release" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "错误：未找到 Release APK 文件！"
+            exit 1
+          fi
+          cp "$APK_PATH" "$APP_DIR/MIUIPackageInstaller.apk"
+          
+          echo "=> 正在生成 Magisk 脚本..."
+          cat << 'EOF' > "$MODULE_DIR/module.prop"
+          id=com.miui.packageinstaller
+          name=InstallerX Revived MIUI
+          version=${{ steps.commit_sha.outputs.SHORT_SHA }}
+          versionCode=1
+          author=wxxsfxyzm, HuaJi2333DaDa
+          description=InstallerX as System Package Installer (MIUI)
+          EOF
+          
+          cat << 'EOF' > "$MODULE_DIR/service.sh"
+          #!/system/bin/sh
+          rm -r /data/system/package_cache/*
+          rm $0
+          EOF
+          
+          cat << 'EOF' > "$MODULE_DIR/uninstall.sh"
+          #!/system/bin/sh
+          pm clear --user 0 com.miui.packageinstaller
+          rm -r /data/system/package_cache/*
+          EOF
+          
+          cat << 'EOF' > "$MODULE_DIR/action.sh"
+          #!/system/bin/sh
+          am start -n com.miui.packageinstaller/com.rosan.installer.ui.activity.SettingsActivity
+          EOF
+          
+          cat << 'EOF' > "$MODULE_DIR/customize.sh"
+          # This ensures Magisk extracts the module files automatically
+          SKIPUNZIP=0
+          
+          # UI print command to show status in the flashing console
+          ui_print "- Installing PackageInstaller Replacement..."
+          
+          # Define permissions
+          # Syntax: set_perm_recursive <directory> <owner> <group> <dir_permission> <file_permission>
+          # 0 0 corresponds to root:root
+          # 0755 is rwxr-xr-x (required for directories)
+          # 0644 is rw-r--r-- (required for system apks)
+          
+          ui_print "- Setting permissions..."
+          set_perm_recursive "$MODPATH/system" 0 0 0755 0644
+          EOF
+          
+          echo "=> 正在打包 ZIP..."
+          cd "$MODULE_DIR"
+          zip -r9 ../InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip .
+          cd ..
+
+      - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: dev-online-apk-${{ steps.commit_sha.outputs.SHORT_SHA }}
-          path: app/build/outputs/apk/onlineUnstable/release/*.apk
-          retention-days: 15
+          name: dev-apk-${{ steps.commit_sha.outputs.SHORT_SHA }}
+          path: app/build/outputs/apk/**/release/*.apk
+          retention-days: 30
           archive: false
 
-      # Upload the offline variant unzipped APK
-      - name: Upload Offline APK
+      - name: Upload Magisk Module
         uses: actions/upload-artifact@v7
         with:
-          name: dev-offline-apk-${{ steps.commit_sha.outputs.SHORT_SHA }}
-          path: app/build/outputs/apk/offlineUnstable/release/*.apk
-          retention-days: 15
+          name: dev-magisk-module-${{ steps.commit_sha.outputs.SHORT_SHA }}
+          path: InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip
+          retention-days: 30
           archive: false

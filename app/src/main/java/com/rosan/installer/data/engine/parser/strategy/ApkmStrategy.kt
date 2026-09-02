@@ -3,12 +3,14 @@
 package com.rosan.installer.data.engine.parser.strategy
 
 import android.graphics.drawable.Drawable
+import com.rosan.installer.data.engine.parser.UnifiedZipFile
 import com.rosan.installer.data.engine.parser.parseSplitMetadata
 import com.rosan.installer.data.engine.signature.PendingApkSignatureAnalyzer
 import com.rosan.installer.domain.engine.model.AnalyseExtraEntity
 import com.rosan.installer.domain.engine.model.packageinfo.AppEntity
 import com.rosan.installer.domain.engine.model.source.DataEntity
 import com.rosan.installer.domain.settings.model.config.ConfigModel
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -16,43 +18,41 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
-import java.io.File
-import java.util.zip.ZipFile
 
-class ApkmStrategy(
-    private val json: Json,
-    private val pendingApkSignatureAnalyzer: PendingApkSignatureAnalyzer
-) : AnalysisStrategy {
+class ApkmStrategy(private val json: Json, private val pendingApkSignatureAnalyzer: PendingApkSignatureAnalyzer) : AnalysisStrategy {
 
     @OptIn(ExperimentalSerializationApi::class)
     override suspend fun analyze(
         config: ConfigModel,
         data: DataEntity,
-        zipFile: ZipFile?,
-        extra: AnalyseExtraEntity
+        zipFile: UnifiedZipFile?,
+        extra: AnalyseExtraEntity,
     ): List<AppEntity> {
-        requireNotNull(zipFile)
+        val archive = requireNotNull(zipFile)
         require(data is DataEntity.FileEntity)
+        val checkSignatures = extra.shouldCheckAppSignatures()
 
         // 1. Parse Info
-        val infoEntry = zipFile.getEntry("info.json") ?: return emptyList()
+        val infoEntry = archive.getEntry("info.json") ?: return emptyList()
         val manifest = withContext(Dispatchers.IO) {
-            zipFile.getInputStream(infoEntry)
+            archive.openEntry(infoEntry)
         }.use {
             json.decodeFromStream<Manifest>(it)
         }
 
         // 2. Load Icon
-        val icon = zipFile.getEntry("icon.png")?.let {
-            Drawable.createFromStream(zipFile.getInputStream(it), it.name)
+        val icon = archive.getEntry("icon.png")?.let { entry ->
+            archive.openEntry(entry).use { input ->
+                Drawable.createFromStream(input, entry.name)
+            }
         }
 
         // 3. Iterate all entries (ApkM usually just lists files flatly)
-        return zipFile.entries().asSequence()
+        return archive.entries.asSequence()
             .filter { !it.isDirectory }
             .flatMap { entry ->
                 val entryName = entry.name
-                val entryData = DataEntity.ZipFileEntity(entryName, data)
+                val entryData = archive.toDataEntity(entry, data)
                 val file = File(entryName)
 
                 when (file.extension) {
@@ -74,14 +74,14 @@ class ApkmStrategy(
                                 type = metadata.type,
                                 filterType = metadata.filterType,
                                 configValue = metadata.configValue,
-                                signatureInfo = if (extra.checkAppSignature) {
+                                signatureInfo = if (checkSignatures) {
                                     pendingApkSignatureAnalyzer.analyze(entryData, extra.cacheDirectory)
                                 } else {
                                     null
-                                }
+                                },
                             )
                         } else {
-                            val signatureInfo = if (extra.checkAppSignature) {
+                            val signatureInfo = if (checkSignatures) {
                                 pendingApkSignatureAnalyzer.analyze(entryData, extra.cacheDirectory)
                             } else {
                                 null
@@ -98,7 +98,7 @@ class ApkmStrategy(
                                 minSdk = manifest.minApi,
                                 sourceType = extra.dataType,
                                 signatureHash = signatureInfo?.primarySha256,
-                                signatureInfo = signatureInfo
+                                signatureInfo = signatureInfo,
                             )
                         }
                         sequenceOf(entity)
@@ -114,10 +114,12 @@ class ApkmStrategy(
                                     dmName = dmName,
                                     targetSdk = null,
                                     minSdk = manifest.minApi,
-                                    sourceType = extra.dataType
-                                )
+                                    sourceType = extra.dataType,
+                                ),
                             )
-                        } else emptySequence()
+                        } else {
+                            emptySequence()
+                        }
                     }
 
                     else -> emptySequence()

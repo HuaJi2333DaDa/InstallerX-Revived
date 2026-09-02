@@ -7,15 +7,14 @@ import com.rosan.installer.domain.settings.model.config.Authorizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class GetAvailableUsersUseCase(
-    private val systemInfoProvider: SystemInfoProvider
-) {
+class GetAvailableUsersUseCase(private val systemInfoProvider: SystemInfoProvider) {
     /**
      * Retrieves the list of system users supported by the current environment.
      * @param authorizer The current authorization method.
+     * @param customizeAuthorizer Command used by the custom authorizer, when applicable.
      * @return Result<Map<UserId, UserName>>
      */
-    suspend operator fun invoke(authorizer: Authorizer): Result<Map<Int, String>> {
+    suspend operator fun invoke(authorizer: Authorizer, customizeAuthorizer: String = ""): Result<Map<Int, String>> {
         // Dhizuku does not support cross-user install/user querying.
         if (authorizer == Authorizer.Dhizuku) {
             return Result.success(emptyMap())
@@ -23,7 +22,7 @@ class GetAvailableUsersUseCase(
 
         return runCatching {
             withContext(Dispatchers.IO) {
-                systemInfoProvider.getUsers(authorizer)
+                systemInfoProvider.getUsers(authorizer, customizeAuthorizer)
             }
         }
     }

@@ -4,6 +4,7 @@ package com.rosan.installer.data.engine.repository
 
 import com.rosan.installer.data.engine.executor.moduleinstaller.LocalModuleInstallerRepoImpl
 import com.rosan.installer.data.engine.executor.moduleinstaller.ShizukuModuleInstallerRepoImpl
+import com.rosan.installer.data.engine.parser.ModuleSourceMaterializer
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.engine.exception.ModuleInstallException
 import com.rosan.installer.domain.engine.model.error.ModuleInstallErrorType
@@ -14,30 +15,39 @@ import com.rosan.installer.domain.privileged.model.PrivilegedErrorType
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.model.config.ConfigModel
 import com.rosan.installer.domain.settings.model.preferences.RootMode
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 
-class ModuleInstallerRepositoryImpl(
-    private val deviceCapabilityProvider: DeviceCapabilityProvider
+class ModuleInstallerRepositoryImpl internal constructor(
+    private val deviceCapabilityProvider: DeviceCapabilityProvider,
+    private val moduleSourceMaterializer: ModuleSourceMaterializer,
 ) : ModuleInstallerRepository {
     override fun doInstallWork(
         config: ConfigModel,
         module: AppEntity.ModuleEntity,
         useRoot: Boolean,
-        rootMode: RootMode
+        rootMode: RootMode,
     ): Flow<String> {
         // 1. Select the appropriate repository implementation
         val repo = when (config.authorizer) {
             Authorizer.Root,
-            Authorizer.Customize -> LocalModuleInstallerRepoImpl()
+            Authorizer.Customize,
+            -> LocalModuleInstallerRepoImpl()
 
             // Shizuku MUST use the Remote implementation
             Authorizer.Shizuku -> ShizukuModuleInstallerRepoImpl(deviceCapabilityProvider)
 
             Authorizer.None -> {
-                if (deviceCapabilityProvider.isSystemApp && useRoot)
+                if (deviceCapabilityProvider.isSystemApp && useRoot) {
                     LocalModuleInstallerRepoImpl()
-                else null // Signal that no session is available
+                } else {
+                    null // Signal that no session is available
+                }
             }
 
             else -> null
@@ -48,27 +58,38 @@ class ModuleInstallerRepositoryImpl(
             return flow {
                 throw ModuleInstallException(
                     errorType = ModuleInstallErrorType.INCOMPATIBLE_AUTHORIZER,
-                    message = "Module installation is not supported with the '${config.authorizer.name}' authorizer."
+                    message = "Module installation is not supported with the '${config.authorizer.name}' authorizer.",
                 )
             }
         }
 
-        // 3. Execute with error handling
-        return try {
-            repo.doInstallWork(config, module, useRoot, rootMode)
-        } catch (e: IllegalStateException) {
-            // Catch immediate configuration errors
-            if (repo is ShizukuModuleInstallerRepoImpl && e.message?.contains("binder") == true
-            ) {
-                flow {
+        // 3. Materialize only when this installation flow is collected, after user confirmation.
+        return flow {
+            var temporaryModuleFile: File? = null
+            try {
+                val installData = withContext(Dispatchers.IO) {
+                    moduleSourceMaterializer.materializeForInstall(module.data)
+                }
+                if (installData !== module.data) {
+                    temporaryModuleFile = File(installData.path)
+                }
+                emitAll(repo.doInstallWork(config, module.copy(data = installData), useRoot, rootMode))
+            } catch (e: IllegalStateException) {
+                if (repo is ShizukuModuleInstallerRepoImpl && e.message?.contains("binder") == true) {
                     throw PrivilegedException(
                         errorType = PrivilegedErrorType.SHIZUKU_NOT_WORK,
                         message = "Shizuku service connection lost.",
-                        cause = e
+                        cause = e,
                     )
+                } else {
+                    throw e
                 }
-            } else {
-                throw e
+            } finally {
+                temporaryModuleFile?.let { file ->
+                    if (!file.delete() && file.exists()) {
+                        Timber.w("Unable to delete materialized module file: ${file.path}")
+                    }
+                }
             }
         }
     }

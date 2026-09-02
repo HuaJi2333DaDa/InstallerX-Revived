@@ -4,9 +4,9 @@ package com.rosan.installer.data.session.handler
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.IntentSender
 import android.os.Build
+import android.os.Process
 import androidx.annotation.RequiresApi
 import com.rosan.installer.R
 import com.rosan.installer.data.session.repository.InstallerSessionRepositoryImpl
@@ -17,26 +17,35 @@ import com.rosan.installer.data.session.resolver.UninstallResolver
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.engine.exception.AnalyseException
 import com.rosan.installer.domain.engine.exception.AuthenticationFailedException
+import com.rosan.installer.domain.engine.exception.DescriptorAnalysisUnsupportedException
 import com.rosan.installer.domain.engine.exception.InstallException
 import com.rosan.installer.domain.engine.model.AnalyseExtraEntity
 import com.rosan.installer.domain.engine.model.error.AnalyseErrorType
 import com.rosan.installer.domain.engine.model.error.InstallErrorType
 import com.rosan.installer.domain.engine.model.install.InstallMetadata
+import com.rosan.installer.domain.engine.model.install.InstallPhase
 import com.rosan.installer.domain.engine.model.install.SessionMode
 import com.rosan.installer.domain.engine.model.install.sourcePath
+import com.rosan.installer.domain.engine.model.packageinfo.AppEntity
 import com.rosan.installer.domain.engine.model.packageinfo.PackageAnalysisResult
+import com.rosan.installer.domain.engine.model.source.AnalysisMaterializationKey
+import com.rosan.installer.domain.engine.model.source.AnalysisMaterializationPolicy
 import com.rosan.installer.domain.engine.usecase.AnalyzePackageUseCase
 import com.rosan.installer.domain.engine.usecase.ApproveSessionUseCase
 import com.rosan.installer.domain.engine.usecase.ClearAppIconCacheUseCase
 import com.rosan.installer.domain.engine.usecase.GetSessionConfirmationDetailsUseCase
 import com.rosan.installer.domain.engine.usecase.ProcessInstallationUseCase
 import com.rosan.installer.domain.engine.usecase.ProcessUninstallUseCase
+import com.rosan.installer.domain.packageupdate.model.PendingSelfUpdateHistory
 import com.rosan.installer.domain.privileged.provider.ShellExecutionProvider
+import com.rosan.installer.domain.session.model.ConfirmationRequest
 import com.rosan.installer.domain.session.model.ConfirmationRequestType
+import com.rosan.installer.domain.session.model.ConfirmationState
 import com.rosan.installer.domain.session.model.InstallResult
 import com.rosan.installer.domain.session.model.ProgressEntity
 import com.rosan.installer.domain.session.model.SelectInstallEntity
 import com.rosan.installer.domain.session.model.UnarchiveErrorInfo
+import com.rosan.installer.domain.session.model.sessionIdOrNull
 import com.rosan.installer.domain.session.repository.NetworkResolver
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.model.config.BiometricAuthMode
@@ -47,13 +56,14 @@ import com.rosan.installer.domain.settings.repository.AppSettingsRepository
 import com.rosan.installer.domain.settings.repository.BooleanSetting
 import com.rosan.installer.domain.settings.repository.StringSetting
 import com.rosan.installer.framework.auth.safeBiometricAuthOrThrow
-import com.rosan.installer.framework.service.AutoLockService
+import com.rosan.installer.framework.packageupdate.SelfUpdateRecoveryManager
 import com.rosan.installer.util.getErrorMessage
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -65,12 +75,10 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import timber.log.Timber
-import java.io.File
 
-class ActionHandler(
-    override val scope: CoroutineScope,
-    override val session: InstallerSessionRepositoryImpl
-) : Handler, KoinComponent {
+class ActionHandler(override val scope: CoroutineScope, override val session: InstallerSessionRepositoryImpl) :
+    Handler,
+    KoinComponent {
     private val mutableProgressFlow: MutableSharedFlow<ProgressEntity>
         get() = session.progress
 
@@ -86,7 +94,7 @@ class ActionHandler(
     private val appSettingsRepo by inject<AppSettingsRepository>()
     private val shellExecutionProvider by inject<ShellExecutionProvider>()
     private val deviceCapabilityProvider by inject<DeviceCapabilityProvider>()
-    private val autoLockService by inject<AutoLockService>()
+    private val selfUpdateRecoveryManager by inject<SelfUpdateRecoveryManager>()
     private val configResolver by inject<ConfigResolver>()
     private val uninstallResolver by inject<UninstallResolver>()
     private val unarchiveResolver by inject<UnarchiveResolver>()
@@ -107,8 +115,9 @@ class ActionHandler(
     private val sourceResolver = SourceResolver(
         context = context,
         networkResolver = networkResolver,
+        appSettingsRepository = appSettingsRepo,
         cacheDirectory = cacheDirectory,
-        progressFlow = mutableProgressFlow
+        progressFlow = mutableProgressFlow,
     )
 
     override suspend fun onStart() {
@@ -127,27 +136,12 @@ class ActionHandler(
                         session.progress.emit(ProgressEntity.Finish)
                     }
 
-                    // Handle Confirmation Actions Concurrently
                     is InstallerSessionRepositoryImpl.Action.ResolveConfirmInstall -> {
-                        // Launch concurrently, DO NOT cancel the main processingJob (which is likely suspended waiting for commit)
-                        scope.launch {
-                            runCatching { handleAction(action) }
-                                .onFailure { Timber.e(it, "ResolveConfirmInstall failed") }
-                        }
+                        handleConfirmationAction(action)
                     }
 
                     is InstallerSessionRepositoryImpl.Action.ApproveSession -> {
-                        // Launch concurrently
-                        scope.launch {
-                            val error = runCatching { handleAction(action) }.exceptionOrNull()
-                            if (error != null) {
-                                Timber.e(error, "ApproveSession failed")
-                                val message = error.getErrorMessage(context)
-                                val emitted = session.toastEvents.tryEmit(message)
-                                Timber.d("[id=$sessionId] ApproveSession failure toast emitted=$emitted, message=$message")
-                                session.close()
-                            }
-                        }
+                        handleConfirmationAction(action)
                     }
 
                     else -> {
@@ -155,6 +149,25 @@ class ActionHandler(
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun handleConfirmationAction(action: InstallerSessionRepositoryImpl.Action) {
+        try {
+            handleAction(action)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Timber.e(error, "${action::class.simpleName} failed")
+            if (action is InstallerSessionRepositoryImpl.Action.ResolveConfirmInstall) {
+                session.confirmationState.value = ConfirmationState.Idle
+            }
+            val message = error.getErrorMessage(context)
+            val emitted = session.toastEvents.tryEmit(message)
+            Timber.d(
+                "[id=$sessionId] Confirmation failure toast emitted=$emitted, message=$message",
+            )
+            session.close()
         }
     }
 
@@ -197,11 +210,14 @@ class ActionHandler(
                             }
 
                         is InstallerSessionRepositoryImpl.Action.Analyse -> ProgressEntity.InstallAnalysedFailed
+
                         is InstallerSessionRepositoryImpl.Action.Uninstall -> ProgressEntity.UninstallFailed
+
                         is InstallerSessionRepositoryImpl.Action.ResolveUnarchive,
                         is InstallerSessionRepositoryImpl.Action.StartUnarchive,
                         is InstallerSessionRepositoryImpl.Action.ResolveUnarchiveError,
-                        is InstallerSessionRepositoryImpl.Action.OpenUnarchiveErrorAction -> ProgressEntity.UnarchiveFailed
+                        is InstallerSessionRepositoryImpl.Action.OpenUnarchiveErrorAction,
+                        -> ProgressEntity.UnarchiveFailed
 
                         else -> ProgressEntity.InstallResolvedFailed
                     }
@@ -209,8 +225,10 @@ class ActionHandler(
                     val currentState = session.progress.first()
                     // Avoid overwriting a Finish state or existing error loop
                     if (currentState != errorState &&
-                        (errorState is ProgressEntity.InstallWaitingUnknownSource ||
-                                currentState !is ProgressEntity.InstallFailed)
+                        (
+                            errorState is ProgressEntity.InstallWaitingUnknownSource ||
+                                currentState !is ProgressEntity.InstallFailed
+                            )
                     ) {
                         Timber.d("[id=$sessionId] Emitting error state: $errorState")
                         session.progress.emit(errorState)
@@ -222,16 +240,9 @@ class ActionHandler(
 
     override suspend fun onFinish() {
         Timber.d("[id=$sessionId] onFinish: Cleaning up resources and cancelling job.")
-        clearActionReplayCache()
         clearCache()
         processingJob?.cancel()
         job?.cancel()
-    }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private fun clearActionReplayCache() {
-        session.action.resetReplayCache()
-        Timber.d("[id=$sessionId] Cleared action replay cache on finish")
     }
 
     private suspend fun handleAction(action: InstallerSessionRepositoryImpl.Action) {
@@ -240,15 +251,20 @@ class ActionHandler(
 
         when (action) {
             is InstallerSessionRepositoryImpl.Action.ResolveInstall -> resolve(action.activity)
+
             is InstallerSessionRepositoryImpl.Action.Analyse -> analyse()
+
             is InstallerSessionRepositoryImpl.Action.Install -> handleSingleInstall(action.triggerAuth)
+
             is InstallerSessionRepositoryImpl.Action.InstallMultiple -> handleMultiInstall(action.triggerAuth)
+
             is InstallerSessionRepositoryImpl.Action.ResolveUninstall -> resolveUninstall(action.activity, action.packageName)
+
             is InstallerSessionRepositoryImpl.Action.Uninstall -> uninstall(action.packageName)
+
             is InstallerSessionRepositoryImpl.Action.ResolveConfirmInstall -> resolveConfirm(
                 action.activity,
-                action.sessionId,
-                action.requestType
+                action.request,
             )
 
             is InstallerSessionRepositoryImpl.Action.ResolveUnarchive -> {
@@ -256,26 +272,35 @@ class ActionHandler(
                     resolveUnarchive(
                         action.activity,
                         action.packageName,
-                        action.intentSender
+                        action.intentSender,
                     )
-                } else unsupportedUnarchive()
+                } else {
+                    unsupportedUnarchive()
+                }
             }
 
             is InstallerSessionRepositoryImpl.Action.StartUnarchive -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                     startUnarchive()
-                } else unsupportedUnarchive()
+                } else {
+                    unsupportedUnarchive()
+                }
             }
 
             is InstallerSessionRepositoryImpl.Action.ResolveUnarchiveError -> resolveUnarchiveError(action.info)
+
             is InstallerSessionRepositoryImpl.Action.OpenUnarchiveErrorAction -> openUnarchiveErrorAction()
+
             // Handle Session Confirmation
             is InstallerSessionRepositoryImpl.Action.ApproveSession -> handleConfirm(action.sessionId, action.granted)
+
             // Handle Reboot Action
             is InstallerSessionRepositoryImpl.Action.Reboot -> handleReboot(action.reason)
+
             // Cancel and Finish are handled in the collector directly
             is InstallerSessionRepositoryImpl.Action.Cancel,
-            is InstallerSessionRepositoryImpl.Action.Finish -> {
+            is InstallerSessionRepositoryImpl.Action.Finish,
+            -> {
             }
         }
     }
@@ -315,9 +340,6 @@ class ActionHandler(
             session.config = session.config.copy(installMode = InstallMode.Dialog)
         }
 
-        Timber.d("[id=$sessionId] resolve: Requesting AutoLockManager check.")
-        autoLockService.onResolveInstall(session.config.authorizer)
-
         if (session.config.installMode.isNotification) {
             Timber.d("[id=$sessionId] Notification mode detected early. Switching to background.")
             session.background(true)
@@ -344,23 +366,60 @@ class ActionHandler(
         val checkAppSignature = appSettingsRepo.getBoolean(BooleanSetting.CheckAppSignature, true).first()
         Timber.d("[id=$sessionId] App signature checks enabled: $checkAppSignature")
 
+        val checkSplitPackageSignatures = appSettingsRepo
+            .getBoolean(BooleanSetting.CheckSplitPackageSignatures, false)
+            .first()
+        Timber.d("[id=$sessionId] Split package signature checks enabled: $checkSplitPackageSignatures")
+
         val extra = AnalyseExtraEntity(
             cacheDirectory = cacheDirectory,
             isModuleFlashEnabled = isModuleEnabled,
-            checkAppSignature = checkAppSignature
+            checkAppSignature = checkAppSignature,
+            checkSplitPackageSignatures = checkSplitPackageSignatures,
         )
 
-        val results = analyzePackage(
-            sessionId = session.id,
-            config = session.config,
-            data = session.data,
-            extra = extra
-        )
+        val materializedSources = mutableSetOf<AnalysisMaterializationKey>()
+        var results: List<PackageAnalysisResult>
+        while (true) {
+            try {
+                results = analyzePackage(
+                    sessionId = session.id,
+                    config = session.config,
+                    data = session.data,
+                    extra = extra,
+                )
+                break
+            } catch (error: DescriptorAnalysisUnsupportedException) {
+                val source = error.source
+                if (
+                    source.analysisMaterializationPolicy !=
+                    AnalysisMaterializationPolicy.RETAINED_SOURCE_REPLACEMENT
+                ) {
+                    // Low Storage deliberately refuses this compatibility fallback: materializing
+                    // here would violate the mode's disk-usage contract.
+                    throw error
+                }
+
+                val key = source.analysisMaterializationKey ?: throw error
+                if (!materializedSources.add(key)) {
+                    Timber.e(error, "Repeated materialization request for the same analysis source")
+                    throw error
+                }
+
+                Timber.i(
+                    error,
+                    "[id=$sessionId] Direct HTTP descriptor analysis is unsupported; " +
+                        "retaining the complete Smart-mode source and retrying.",
+                )
+                session.data = sourceResolver.materializeForAnalysis(session.data, source)
+                session.progress.emit(ProgressEntity.InstallAnalysing)
+            }
+        }
 
         if (results.isEmpty()) {
             throw AnalyseException(
                 errorType = AnalyseErrorType.ALL_FILES_UNSUPPORTED,
-                message = "No valid installation entities found in the provided sources."
+                message = "No valid installation entities found in the provided sources.",
             )
         }
 
@@ -381,13 +440,11 @@ class ActionHandler(
      *
      * @throws AuthenticationFailedException Thrown if the user fails or cancels biometric authentication.
      */
-    private suspend fun requestUserBiometricAuthentication(
-        isInstall: Boolean
-    ) {
+    private suspend fun requestUserBiometricAuthentication(isInstall: Boolean) {
         val requireBiometricAuth = if (isInstall) {
             val globalMode = appSettingsRepo.getString(
                 StringSetting.InstallerBiometricAuthMode,
-                BiometricAuthMode.FollowConfig.value
+                BiometricAuthMode.FollowConfig.value,
             ).first().let { BiometricAuthMode.fromValueOrDefault(it) }
 
             when (globalMode) {
@@ -404,11 +461,12 @@ class ActionHandler(
         return context.safeBiometricAuthOrThrow(
             title = context.getString(R.string.auth_to_continue_work),
             subTitle = context.getString(
-                if (isInstall)
+                if (isInstall) {
                     R.string.auth_summary_install
-                else
+                } else {
                     R.string.auth_summary_uninstall
-            )
+                },
+            ),
         )
     }
 
@@ -454,18 +512,20 @@ class ActionHandler(
                     val entitiesToInstall = appEntities.map { it.copy(selected = true) }
                     val tempResults = listOf(targetResult.copy(appEntities = entitiesToInstall))
 
-                    // Perform install
-                    processInstallation(
-                        config = session.config,
-                        analysisResults = tempResults,
-                        metadata = installMetadata(),
-                        current = currentProgressIndex,
-                        total = totalCount
-                    ).collect { progress ->
-                        if (progress is ProgressEntity.InstallingModule) {
-                            session.moduleLog = progress.output
+                    runWithSelfUpdateRecovery(tempResults) {
+                        // Perform install
+                        processInstallation(
+                            config = session.config,
+                            analysisResults = tempResults,
+                            metadata = installMetadata(),
+                            current = currentProgressIndex,
+                            total = totalCount,
+                        ).collect { progress ->
+                            if (progress is ProgressEntity.InstallingModule) {
+                                session.moduleLog = progress.output
+                            }
+                            session.progress.emit(progress)
                         }
-                        session.progress.emit(progress)
                     }
 
                     appEntities.forEach { entity ->
@@ -506,10 +566,8 @@ class ActionHandler(
      */
     private fun findResultForEntity(
         target: SelectInstallEntity,
-        allResults: List<PackageAnalysisResult>
-    ): PackageAnalysisResult? {
-        return allResults.find { it.packageName == target.app.packageName }
-    }
+        allResults: List<PackageAnalysisResult>,
+    ): PackageAnalysisResult? = allResults.find { it.packageName == target.app.packageName }
 
     /**
      * Performs the installation logic.
@@ -517,17 +575,19 @@ class ActionHandler(
     private suspend fun performInstallLogic() {
         Timber.d("[id=$sessionId] install: Starting installation process via UseCase.")
 
-        processInstallation(
-            config = session.config,
-            analysisResults = session.analysisResults,
-            metadata = installMetadata()
-        ).collect { progress ->
-            // Sync module logs back to the session repository if applicable
-            if (progress is ProgressEntity.InstallingModule) {
-                session.moduleLog = progress.output
+        runWithSelfUpdateRecovery(session.analysisResults) {
+            processInstallation(
+                config = session.config,
+                analysisResults = session.analysisResults,
+                metadata = installMetadata(),
+            ).collect { progress ->
+                // Sync module logs back to the session repository if applicable
+                if (progress is ProgressEntity.InstallingModule) {
+                    session.moduleLog = progress.output
+                }
+                // Emit progress to the UI layer
+                session.progress.emit(progress)
             }
-            // Emit progress to the UI layer
-            session.progress.emit(progress)
         }
 
         // Cache cleanup strategy
@@ -540,17 +600,101 @@ class ActionHandler(
         }
     }
 
-    private suspend fun resolveConfirm(
-        activity: Activity,
-        sysSessionId: Int,
-        requestType: ConfirmationRequestType
-    ) {
-        Timber.d("[id=$sessionId] resolveConfirmInstall: Starting for system session $sysSessionId, type=$requestType.")
+    /**
+     * Performs the installation logic with self-update recovery.
+     * @param analysisResults The list of [PackageAnalysisResult] to install.
+     * @param install The suspend function to perform the installation.
+     */
+    private suspend fun runWithSelfUpdateRecovery(analysisResults: List<PackageAnalysisResult>, install: suspend () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.CINNAMON_BUN) {
+            install()
+            return
+        }
 
-        // 1. Capture the exact Installing state before we override it
+        val selfUpdate = analysisResults.firstOrNull { result ->
+            result.packageName == context.packageName && result.appEntities.any { it.selected }
+        }
+        // Android 17 may kill this process before a successful self-update call returns.
+        // Persist the expected package state immediately before handing control to PackageManager.
+        val recoveryArmed = selfUpdate != null && selfUpdateRecoveryManager.arm(
+            sessionId = sessionId,
+            history = selfUpdate.toPendingSelfUpdateHistory(),
+        )
+
+        try {
+            install()
+        } catch (error: Throwable) {
+            if (recoveryArmed) {
+                withContext(NonCancellable) {
+                    selfUpdateRecoveryManager.clear(sessionId)
+                }
+            }
+            throw error
+        }
+    }
+
+    private fun PackageAnalysisResult.toPendingSelfUpdateHistory(): PendingSelfUpdateHistory? {
+        val selectedEntities = appEntities.filter { it.selected }
+        val base = selectedEntities
+            .map { it.app }
+            .filterIsInstance<AppEntity.BaseEntity>()
+            .firstOrNull()
+            ?: appEntities
+                .map { it.app }
+                .filterIsInstance<AppEntity.BaseEntity>()
+                .firstOrNull()
+            ?: return null
+        val installed = installedAppInfo?.takeUnless { it.isUninstalled }
+
+        return PendingSelfUpdateHistory(
+            packageName = packageName,
+            appLabel = base.label ?: installed?.label,
+            oldVersionName = installed?.versionName,
+            oldVersionCode = installed?.versionCode,
+            newVersionName = base.versionName,
+            newVersionCode = base.versionCode,
+            sourcePaths = selectedEntities
+                .mapNotNull { it.app.data.sourcePath() }
+                .distinct(),
+            initiatorPackageName = session.config.initiatorPackageName,
+            authorizer = session.config.authorizer,
+            installMode = session.config.installMode,
+            operationSessionKey = sessionId,
+        )
+    }
+
+    private suspend fun resolveConfirm(activity: Activity, request: ConfirmationRequest) {
+        val sysSessionId = request.sessionId
+        val requestType = request.requestType
+        val existingState = session.confirmationState.value
+        if (existingState.sessionIdOrNull() == sysSessionId &&
+            existingState !is ConfirmationState.Idle
+        ) {
+            Timber.d(
+                "[id=$sessionId] Ignoring duplicate confirm request for platform session $sysSessionId, " +
+                    "state=${existingState::class.simpleName}.",
+            )
+            return
+        }
+        if (existingState !is ConfirmationState.Idle) {
+            Timber.w(
+                "[id=$sessionId] Ignoring platform session $sysSessionId while confirmation " +
+                    "${existingState.sessionIdOrNull()} is active.",
+            )
+            return
+        }
+
+        session.confirmationState.value = ConfirmationState.Resolving(request)
+        Timber.d(
+            "[id=$sessionId] resolveConfirmInstall: Starting for system session $sysSessionId, " +
+                "type=$requestType, callerUid=${request.callerUid}.",
+        )
+
+        // Preserve the current visual progress, but identify ownership only from platform session
+        // IDs registered by the executor that created them.
         val previousState = session.progress.replayCache.firstOrNull()
         val installingState = previousState as? ProgressEntity.Installing
-        val isSelfSession = installingState != null
+        val isSelfSession = sysSessionId in session.activePlatformSessionIds.value
 
         // Extract the progress, defaulting to 1 if it wasn't an Installing state
         val currentProgress = installingState?.current ?: 1
@@ -561,14 +705,33 @@ class ActionHandler(
         }
 
         // Pass the captured progress into the UseCase
-        val details = getSessionConfirmationDetails(
+        val unresolvedDetails = getSessionConfirmationDetails(
             sessionId = sysSessionId,
             config = session.config,
             requestType = requestType,
             isSelfSession = isSelfSession,
             currentProgress = currentProgress,
-            totalProgress = totalProgress
+            totalProgress = totalProgress,
         )
+
+        val hasCallerIdentity =
+            request.callerUid != if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Process.INVALID_UID else INVALID_UID
+        val isCallerVerified = isSelfSession ||
+            (hasCallerIdentity && request.callerUid == unresolvedDetails.installerUid) ||
+            request.callerUid == Process.SYSTEM_UID
+        if (hasCallerIdentity && !isCallerVerified) {
+            throw SecurityException(
+                "Confirmation caller uid ${request.callerUid} does not own platform session " +
+                    "$sysSessionId (installerUid=${unresolvedDetails.installerUid})",
+            )
+        }
+        if (!isCallerVerified) {
+            Timber.w(
+                "[id=$sessionId] Caller identity is unavailable for platform session " +
+                    "$sysSessionId; requiring an explicit user decision.",
+            )
+        }
+        val details = unresolvedDetails.copy(isCallerVerified = isCallerVerified)
 
         val externalInstallerPackageName = details.installerPackageName.takeIf { !isSelfSession }
         if (externalInstallerPackageName != null) {
@@ -577,33 +740,30 @@ class ActionHandler(
         val hasResolvedSessionDetails = details.packageName.isNotBlank() || details.installerPackageName != null
 
         if (requestType == ConfirmationRequestType.PRE_APPROVAL && hasResolvedSessionDetails && !details.isPreApprovalRequested) {
+            if (!isCallerVerified) {
+                throw SecurityException(
+                    "Unverified caller requested pre-approval for non-pre-approval session " +
+                        sysSessionId,
+                )
+            }
             Timber.w("[id=$sessionId] resolveConfirmInstall: Session $sysSessionId is not requesting pre-approval. Rejecting.")
-            approveSession(
-                sessionId = sysSessionId,
-                granted = false,
-                config = session.config,
-                details = details
-            )
-            session.close()
+            session.confirmationDetails.value = details
+            session.confirmationState.value = ConfirmationState.AwaitingDecision(details)
+            handleConfirm(sysSessionId, false)
             return
         }
 
         session.confirmationDetails.value = details
+        session.confirmationState.value = ConfirmationState.AwaitingDecision(details)
 
         val canAutoApproveSession =
-            session.config.autoApproveSession &&
-                    !appSettingsRepo.getBoolean(BooleanSetting.LabRespectPlatformInstallPolicy, false).first()
+            isCallerVerified &&
+                session.config.autoApproveSession &&
+                !appSettingsRepo.getBoolean(BooleanSetting.LabRespectPlatformInstallPolicy, false).first()
 
         if (canAutoApproveSession) {
             Timber.d("[id=$sessionId] resolveConfirmInstall: Auto approving system session $sysSessionId.")
-            val error = runCatching { handleConfirm(sysSessionId, true) }.exceptionOrNull()
-            if (error != null) {
-                Timber.e(error, "[id=$sessionId] Auto approve session failed")
-                val message = error.getErrorMessage(context)
-                val emitted = session.toastEvents.tryEmit(message)
-                Timber.d("[id=$sessionId] Auto approve failure toast emitted=$emitted, message=$message")
-                session.close()
-            }
+            handleConfirm(sysSessionId, true)
             return
         }
 
@@ -612,11 +772,7 @@ class ActionHandler(
     }
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
-    private suspend fun resolveUnarchive(
-        activity: Activity,
-        packageName: String,
-        intentSender: IntentSender
-    ) {
+    private suspend fun resolveUnarchive(activity: Activity, packageName: String, intentSender: IntentSender) {
         Timber.d("[id=$sessionId] resolveUnarchive: Resolving $packageName.")
         session.progress.emit(ProgressEntity.UnarchiveResolving)
 
@@ -624,7 +780,7 @@ class ActionHandler(
             activity = activity,
             sessionId = sessionId,
             packageName = packageName,
-            intentSender = intentSender
+            intentSender = intentSender,
         )
         session.progress.emit(ProgressEntity.UnarchiveReady)
     }
@@ -662,7 +818,7 @@ class ActionHandler(
         val result = uninstallResolver.resolve(
             activity = activity,
             sessionId = sessionId,
-            packageName = packageName
+            packageName = packageName,
         )
 
         session.config = result.config
@@ -681,25 +837,56 @@ class ActionHandler(
 
         processUninstall(
             config = session.config,
-            packageName = packageName
+            packageName = packageName,
         )
         Timber.d("[id=$sessionId] uninstall: Succeeded for $packageName. Emitting ProgressEntity.UninstallSuccess.")
         session.progress.emit(ProgressEntity.UninstallSuccess)
     }
 
     private suspend fun handleConfirm(sessionId: Int, granted: Boolean) {
-        val detailsBeforeApprove = session.confirmationDetails.value
-        Timber.d("[id=${this.sessionId}] ApproveSession: $granted for session $sessionId")
-        approveSession(
-            sessionId = sessionId,
-            granted = granted,
-            config = session.config,
-            details = detailsBeforeApprove
-        )
+        val detailsBeforeApprove = when (val state = session.confirmationState.value) {
+            is ConfirmationState.AwaitingDecision -> state.details.takeIf {
+                it.sessionId == sessionId
+            }
 
-        val details = session.confirmationDetails.value
+            is ConfirmationState.Submitting,
+            is ConfirmationState.Completed,
+            -> {
+                Timber.d(
+                    "[id=${this.sessionId}] Ignoring duplicate decision for platform session $sessionId, " +
+                        "state=${state::class.simpleName}.",
+                )
+                return
+            }
+
+            else -> null
+        } ?: run {
+            Timber.w(
+                "[id=${this.sessionId}] Ignoring decision for non-active platform session $sessionId.",
+            )
+            return
+        }
+
+        session.confirmationState.value = ConfirmationState.Submitting(detailsBeforeApprove, granted)
+        Timber.d("[id=${this.sessionId}] ApproveSession: $granted for session $sessionId")
+        try {
+            approveSession(
+                sessionId = sessionId,
+                granted = granted,
+                config = session.config,
+                details = detailsBeforeApprove,
+            )
+        } catch (error: CancellationException) {
+            session.confirmationState.value = ConfirmationState.AwaitingDecision(detailsBeforeApprove)
+            throw error
+        } catch (error: Exception) {
+            session.confirmationState.value = ConfirmationState.AwaitingDecision(detailsBeforeApprove)
+            throw error
+        }
+        session.confirmationState.value = ConfirmationState.Completed(sessionId)
+
         if (granted && session.config.toastMode != ToastMode.Disable) {
-            val sourceLabel = details?.sourceAppLabel
+            val sourceLabel = detailsBeforeApprove.sourceAppLabel
                 ?: session.config.initiatorPackageName
                 ?: context.getString(R.string.installer_label_unknown)
             val message = context.getString(R.string.install_confirm_approved_toast, sourceLabel)
@@ -707,7 +894,7 @@ class ActionHandler(
             Timber.d("[id=${this.sessionId}] Approve success toast emitted=$emitted")
         }
 
-        val isSelfSession = details?.isSelfSession == true
+        val isSelfSession = detailsBeforeApprove.isSelfSession
 
         if (!isSelfSession) {
             // For external apps, approving/denying the session is the end of our job.
@@ -716,11 +903,19 @@ class ActionHandler(
             // For our own installations, we need to wait for the system callback.
             if (granted) {
                 // Restore the Installing UI while we wait for LocalIntentReceiver.
-                val current = details.currentProgress
-                val total = details.totalProgress
-                val label = details.appLabel.toString()
+                val current = detailsBeforeApprove.currentProgress
+                val total = detailsBeforeApprove.totalProgress
+                val label = detailsBeforeApprove.appLabel.toString()
 
-                session.progress.emit(ProgressEntity.Installing(current, total, label))
+                session.progress.emit(
+                    ProgressEntity.Installing(
+                        current = current,
+                        total = total,
+                        appLabel = label,
+                        writeProgress = 1f,
+                        phase = InstallPhase.INSTALLING,
+                    ),
+                )
             } else {
                 // DO NOT emit InstallFailed manually here!
                 // The system will abort the session and send an INSTALL_FAILED_ABORTED intent
@@ -734,7 +929,8 @@ class ActionHandler(
     private suspend fun handleReboot(reason: String) {
         Timber.d("[id=$sessionId] handleReboot: Starting cleanup before reboot.")
         val systemUseRoot =
-            deviceCapabilityProvider.isSystemApp && appSettingsRepo.getBoolean(BooleanSetting.AlwaysUseRootInSystem, false).first()
+            deviceCapabilityProvider.isSystemApp &&
+                appSettingsRepo.getBoolean(BooleanSetting.AlwaysUseRootInSystem, false).first()
         if (systemUseRoot) session.config = session.config.copy(authorizer = Authorizer.Root)
         // Execute cleanup immediately
         // Call clearCache() explicitly to ensure temporary files are removed
@@ -814,11 +1010,16 @@ class ActionHandler(
         }
     }
 
-    private fun installMetadata(): InstallMetadata =
-        InstallMetadata(
-            sourceUris = session.sourceUris,
-            referrerUri = session.referrerUri
-        )
+    private fun installMetadata(): InstallMetadata = InstallMetadata(
+        sourceUris = session.sourceUris,
+        referrerUri = session.referrerUri,
+        operationSessionKey = session.id,
+        onPlatformSessionActiveChanged = session::setPlatformSessionActive,
+    )
 
     private val InstallMode.isNotification get() = this == InstallMode.Notification || this == InstallMode.AutoNotification
+
+    private companion object {
+        const val INVALID_UID = -1
+    }
 }

@@ -17,7 +17,8 @@ data class PackageAnalysisResult(
     val seedColor: Int? = null,
     val installedAppInfo: InstalledAppInfo?,
     val installedModuleInfo: InstalledModuleInfo? = null,
+    val signatureCheckPerformed: Boolean,
     val signatureMatchStatus: SignatureMatchStatus,
     val signatureAnalysis: PackageSignatureAnalysis = PackageSignatureAnalysis(),
-    val identityStatus: PackageIdentityStatus
+    val identityStatus: PackageIdentityStatus,
 )

@@ -8,12 +8,16 @@ import com.rosan.installer.core.reflection.ReflectionProvider
 import com.rosan.installer.domain.device.provider.DeviceCapabilityProvider
 import com.rosan.installer.domain.engine.model.install.InstallEntity
 import com.rosan.installer.domain.engine.model.install.InstallMetadata
+import com.rosan.installer.domain.engine.model.install.InstallPhase
+import com.rosan.installer.domain.engine.model.install.InstallWriteProgress
 import com.rosan.installer.domain.privileged.provider.PostInstallTaskProvider
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.model.config.ConfigModel
-import com.rosan.installer.framework.privileged.recycler.ProcessHookRecycler
-import com.rosan.installer.framework.privileged.util.SHELL_ROOT
-import com.rosan.installer.framework.privileged.util.SHELL_SH
+import com.rosan.installer.framework.privileged.core.execution.authorization.requireCustomizeAuthorizer
+import com.rosan.installer.framework.privileged.core.infrastructure.process.AppProcessTerminal
+import com.rosan.installer.framework.privileged.core.infrastructure.process.SHELL_SH
+import com.rosan.installer.framework.privileged.core.infrastructure.process.ShellCommand
+import com.rosan.installer.framework.privileged.core.infrastructure.recycler.ProcessHookRecycler
 import org.koin.core.context.GlobalContext
 import org.koin.core.parameter.parametersOf
 
@@ -32,7 +36,9 @@ class ProcessAppInstallerRepoImpl(
         respectPlatformInstallPolicy: Boolean,
         blacklist: List<String>,
         sharedUserIdBlacklist: List<String>,
-        sharedUserIdExemption: List<String>
+        sharedUserIdExemption: List<String>,
+        onProgress: suspend (InstallWriteProgress) -> Unit,
+        onPhaseChanged: suspend (InstallPhase) -> Unit,
     ) = runWithProcess(config) {
         super.doInstallWork(
             config,
@@ -41,22 +47,17 @@ class ProcessAppInstallerRepoImpl(
             respectPlatformInstallPolicy,
             blacklist,
             sharedUserIdBlacklist,
-            sharedUserIdExemption
+            sharedUserIdExemption,
+            onProgress,
+            onPhaseChanged,
         )
     }
 
-    override suspend fun doUninstallWork(
-        config: ConfigModel,
-        packageName: String
-    ) = runWithProcess(config) {
+    override suspend fun doUninstallWork(config: ConfigModel, packageName: String) = runWithProcess(config) {
         super.doUninstallWork(config, packageName)
     }
 
-    override suspend fun approveSession(
-        config: ConfigModel,
-        sessionId: Int,
-        granted: Boolean
-    ) = runWithProcess(config) {
+    override suspend fun approveSession(config: ConfigModel, sessionId: Int, granted: Boolean) = runWithProcess(config) {
         super.approveSession(config, sessionId, granted)
     }
 
@@ -64,32 +65,32 @@ class ProcessAppInstallerRepoImpl(
         val service = localService
             ?: throw IllegalStateException(
                 "Service is null in iBinderWrapper. " +
-                        "Make sure doInstallWork/doUninstallWork calls are properly scoped."
+                    "Make sure doInstallWork/doUninstallWork calls are properly scoped.",
             )
 
         return service.binderWrapper(iBinder)
     }
 
-    override suspend fun doFinishWork(
-        config: ConfigModel,
-        entities: List<InstallEntity>,
-        result: Result<Unit>
-    ) {
+    override suspend fun doFinishWork(config: ConfigModel, entities: List<InstallEntity>, result: Result<Unit>) {
         super.doFinishWork(config, entities, result)
     }
 
     private suspend fun <T> runWithProcess(
         config: ConfigModel,
-        rootShell: String = SHELL_ROOT,
-        block: suspend () -> T
+        rootTerminal: AppProcessTerminal = AppProcessTerminal.Root,
+        block: suspend () -> T,
     ): T {
-        val shell = when (config.authorizer) {
-            Authorizer.Root -> rootShell
-            Authorizer.Customize -> config.customizeAuthorizer
-            else -> SHELL_SH
+        val terminal = when (config.authorizer) {
+            Authorizer.Root -> rootTerminal
+
+            Authorizer.Customize -> AppProcessTerminal.Customize(
+                ShellCommand.parse(requireCustomizeAuthorizer(config.customizeAuthorizer)),
+            )
+
+            else -> AppProcessTerminal.Customize(ShellCommand.of(SHELL_SH))
         }
 
-        val handle = GlobalContext.get().get<ProcessHookRecycler> { parametersOf(shell) }.make()
+        val handle = GlobalContext.get().get<ProcessHookRecycler> { parametersOf(terminal) }.make()
 
         return try {
             localService = handle.entity

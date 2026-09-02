@@ -8,8 +8,9 @@ import com.rosan.installer.domain.engine.repository.ModuleInstallerRepository
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.model.config.ConfigModel
 import com.rosan.installer.domain.settings.model.preferences.RootMode
-import com.rosan.installer.framework.privileged.util.SHELL_ROOT
-import com.rosan.installer.framework.privileged.util.SU_ARGS
+import com.rosan.installer.framework.privileged.core.execution.authorization.requireCustomizeAuthorizer
+import com.rosan.installer.framework.privileged.core.infrastructure.process.SHELL_ROOT
+import com.rosan.installer.framework.privileged.core.infrastructure.process.SU_ARGS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,7 @@ class LocalModuleInstallerRepoImpl : ModuleInstallerRepository {
         config: ConfigModel,
         module: AppEntity.ModuleEntity,
         useRoot: Boolean,
-        rootMode: RootMode
+        rootMode: RootMode,
     ): Flow<String> = callbackFlow {
         // 1. Resolve Path using Helper
         val modulePath = ModuleInstallerUtils.getModulePathOrThrow(module)
@@ -33,8 +34,8 @@ class LocalModuleInstallerRepoImpl : ModuleInstallerRepository {
         // 2. Determine Shell Binary Parts
         // If customizing, we still need to split user input (e.g. "su -c") to ensure ProcessBuilder works correctly.
         // If default, we directly concatenate the constants (SHELL_ROOT + SU_ARGS).
-        val shellParts = if (config.authorizer == Authorizer.Customize && config.customizeAuthorizer.isNotBlank()) {
-            config.customizeAuthorizer.trim().split("\\s+".toRegex())
+        val shellParts = if (config.authorizer == Authorizer.Customize) {
+            requireCustomizeAuthorizer(config.customizeAuthorizer).trim().split("\\s+".toRegex())
         } else {
             listOf(SHELL_ROOT, SU_ARGS)
         }
@@ -67,8 +68,8 @@ class LocalModuleInstallerRepoImpl : ModuleInstallerRepository {
                 close(
                     ModuleInstallException(
                         errorType = ModuleInstallErrorType.EXIT_CODE_NON_ZERO,
-                        message = "Command failed with exit code $exitCode"
-                    )
+                        message = "Command failed with exit code $exitCode",
+                    ),
                 )
             }
         } catch (e: Exception) {
@@ -77,8 +78,8 @@ class LocalModuleInstallerRepoImpl : ModuleInstallerRepository {
                 ModuleInstallException(
                     errorType = ModuleInstallErrorType.CMD_INIT_FAILED,
                     message = "Failed to initiate command: ${e.message}",
-                    cause = e
-                )
+                    cause = e,
+                ),
             )
         } finally {
             process?.destroy()

@@ -9,23 +9,22 @@ import com.rosan.installer.data.session.repository.InstallerSessionRepositoryImp
 import com.rosan.installer.domain.session.repository.InstallerSessionManager
 import com.rosan.installer.domain.session.repository.InstallerSessionRepository
 import com.rosan.installer.framework.service.InstallerService
-import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import timber.log.Timber
 
 /**
  * Manager class responsible for controlling the lifecycle of InstallerRepo instances.
  * Managed as a Singleton by Koin.
  */
-class InstallerSessionManagerImpl(
-    private val context: Context
-) : InstallerSessionManager {
+class InstallerSessionManagerImpl(private val context: Context) : InstallerSessionManager {
 
     // Thread-safe map to store active installer sessions
     private val sessions = ConcurrentHashMap<String, InstallerSessionRepositoryImpl>()
 
     // Queue for deferred foreground installs
     private val foregroundInstallQueue = ArrayDeque<Intent>()
+    private val foregroundConfirmationQueue = ArrayDeque<Pair<Intent, Int>>()
     private val foregroundUninstallQueue = ArrayDeque<Intent>()
 
     /**
@@ -49,7 +48,7 @@ class InstallerSessionManagerImpl(
 
         val repo = InstallerSessionRepositoryImpl(
             id = newId,
-            onClose = onCloseAction
+            onClose = onCloseAction,
         )
         sessions[newId] = repo
 
@@ -73,18 +72,36 @@ class InstallerSessionManagerImpl(
         }
     }
 
-    override fun takeNextForegroundInstall(): Intent? =
-        synchronized(foregroundInstallQueue) {
-            foregroundInstallQueue.removeFirstOrNull()?.also {
-                Timber.d("InstallerSessionManager: Foreground install dequeued. Pending count=${foregroundInstallQueue.size}")
-            }
+    override fun takeNextForegroundInstall(): Intent? = synchronized(foregroundInstallQueue) {
+        foregroundInstallQueue.removeFirstOrNull()?.also {
+            Timber.d("InstallerSessionManager: Foreground install dequeued. Pending count=${foregroundInstallQueue.size}")
         }
+    }
 
     override fun clearForegroundInstallQueue() {
         synchronized(foregroundInstallQueue) {
             val count = foregroundInstallQueue.size
             foregroundInstallQueue.clear()
             Timber.d("InstallerSessionManager: Foreground install queue cleared. Removed count=$count")
+        }
+    }
+
+    override fun enqueueForegroundConfirmation(intent: Intent, callerUid: Int) {
+        synchronized(foregroundConfirmationQueue) {
+            foregroundConfirmationQueue.addLast(Intent(intent) to callerUid)
+            Timber.d(
+                "InstallerSessionManager: Confirmation deferred. " +
+                    "Pending count=${foregroundConfirmationQueue.size}",
+            )
+        }
+    }
+
+    override fun takeNextForegroundConfirmation(): Pair<Intent, Int>? = synchronized(foregroundConfirmationQueue) {
+        foregroundConfirmationQueue.removeFirstOrNull()?.also {
+            Timber.d(
+                "InstallerSessionManager: Confirmation dequeued. " +
+                    "Pending count=${foregroundConfirmationQueue.size}",
+            )
         }
     }
 
@@ -95,12 +112,11 @@ class InstallerSessionManagerImpl(
         }
     }
 
-    override fun takeNextForegroundUninstall(): Intent? =
-        synchronized(foregroundUninstallQueue) {
-            foregroundUninstallQueue.removeFirstOrNull()?.also {
-                Timber.d("InstallerSessionManager: Foreground uninstall dequeued. Pending count=${foregroundUninstallQueue.size}")
-            }
+    override fun takeNextForegroundUninstall(): Intent? = synchronized(foregroundUninstallQueue) {
+        foregroundUninstallQueue.removeFirstOrNull()?.also {
+            Timber.d("InstallerSessionManager: Foreground uninstall dequeued. Pending count=${foregroundUninstallQueue.size}")
         }
+    }
 
     /**
      * Removes a session from the manager.

@@ -3,17 +3,16 @@
 package com.rosan.installer.ui.navigation
 
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import timber.log.Timber
+import top.yukonga.miuix.kmp.nav.core.NavBackStack
+import top.yukonga.miuix.kmp.nav.core.NavKey
 
 // kang from KernelSU manager
 // with some modify (anti reenter page) from ReSukiSU manager
-class Navigator(
-    val backStack: MutableList<NavKey>
-) {
+class Navigator(val backStack: NavBackStack) {
     private val resultBus = mutableMapOf<String, MutableSharedFlow<Any>>()
 
     // Push a key onto the back stack.
@@ -82,9 +81,7 @@ class Navigator(
 
     // Observe results for a given request key as a SharedFlow.
     @Suppress("UNCHECKED_CAST")
-    fun <T : Any> observeResult(requestKey: String): SharedFlow<T> {
-        return ensureChannel(requestKey) as SharedFlow<T>
-    }
+    fun <T : Any> observeResult(requestKey: String): SharedFlow<T> = ensureChannel(requestKey) as SharedFlow<T>
 
     // Clear the last emitted result for the request key.
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -93,17 +90,13 @@ class Navigator(
     }
 
     // Get current NavKey on the back stack.
-    fun current(): NavKey? {
-        return backStack.lastOrNull()
-    }
+    fun current(): NavKey? = backStack.lastOrNull()
 
     // Get current size of back stack.
-    fun backStackSize(): Int {
-        return backStack.size
-    }
+    fun backStackSize(): Int = backStack.size
 
-    private fun ensureChannel(key: String): MutableSharedFlow<Any> {
-        return resultBus.getOrPut(key) { MutableSharedFlow(replay = 1, extraBufferCapacity = 0) }
+    private fun ensureChannel(key: String): MutableSharedFlow<Any> = resultBus.getOrPut(key) {
+        MutableSharedFlow(replay = 1, extraBufferCapacity = 0)
     }
 }
 

@@ -12,6 +12,7 @@ import com.rosan.installer.domain.engine.model.install.InstallEntity
 import com.rosan.installer.domain.engine.model.install.InstallMetadata
 import com.rosan.installer.domain.settings.model.config.Authorizer
 import com.rosan.installer.domain.settings.model.config.ConfigModel
+import com.rosan.installer.domain.settings.model.config.InstallReason
 import com.rosan.installer.domain.settings.model.config.PackageSource
 import timber.log.Timber
 
@@ -20,18 +21,18 @@ internal fun PackageInstaller.SessionParams.applySessionContext(
     metadata: InstallMetadata,
     entities: List<InstallEntity>,
     installerPackageName: String?,
-    respectPlatformInstallPolicy: Boolean
+    respectPlatformInstallPolicy: Boolean,
 ) {
     applyMetadata(
         metadata = metadata,
         entities = entities,
         installerPackageName = installerPackageName,
-        respectPlatformInstallPolicy = respectPlatformInstallPolicy
+        respectPlatformInstallPolicy = respectPlatformInstallPolicy,
     )
     applyInstallReasonAndPackageSource(
         config = config,
         metadata = metadata,
-        respectPlatformInstallPolicy = respectPlatformInstallPolicy
+        respectPlatformInstallPolicy = respectPlatformInstallPolicy,
     )
 }
 
@@ -39,7 +40,7 @@ private fun PackageInstaller.SessionParams.applyMetadata(
     metadata: InstallMetadata,
     entities: List<InstallEntity>,
     installerPackageName: String?,
-    respectPlatformInstallPolicy: Boolean
+    respectPlatformInstallPolicy: Boolean,
 ) {
     installerPackageName
         ?.takeIf { it.isNotBlank() }
@@ -67,7 +68,7 @@ private fun PackageInstaller.SessionParams.applyMetadata(
     ) {
         setPermissionState(
             Manifest.permission.USE_FULL_SCREEN_INTENT,
-            PackageInstaller.SessionParams.PERMISSION_STATE_DENIED
+            PackageInstaller.SessionParams.PERMISSION_STATE_DENIED,
         )
     }
 }
@@ -75,19 +76,24 @@ private fun PackageInstaller.SessionParams.applyMetadata(
 private fun PackageInstaller.SessionParams.applyInstallReasonAndPackageSource(
     config: ConfigModel,
     metadata: InstallMetadata,
-    respectPlatformInstallPolicy: Boolean
+    respectPlatformInstallPolicy: Boolean,
 ) {
     val installReason = when {
-        respectPlatformInstallPolicy -> PackageManager.INSTALL_REASON_USER
-        config.enableCustomizeInstallReason -> config.installReason.value
-        else -> PackageManager.INSTALL_REASON_UNKNOWN
+        respectPlatformInstallPolicy -> InstallReason.fromInt(PackageManager.INSTALL_REASON_USER)
+
+        config.enableCustomizeInstallReason -> config.installReason
+
+        else -> if (config.authorizer == Authorizer.Dhizuku) {
+            InstallReason.fromInt(PackageManager.INSTALL_REASON_POLICY)
+        } else {
+            InstallReason.fromInt(PackageManager.INSTALL_REASON_UNKNOWN)
+        }
     }
-    Timber.d("Setting installReason to $installReason")
-    setInstallReason(installReason)
+    Timber.d("Setting installReason to ${installReason.name} (${installReason.value})")
+    setInstallReason(installReason.value)
 
     // Only available on Android 13+.
-    // TODO Dhizuku needs test.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && config.authorizer != Authorizer.Dhizuku) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         val packageSource = when {
             respectPlatformInstallPolicy -> metadata.defaultPackageSource()
             config.enableCustomizePackageSource -> config.packageSource
@@ -98,13 +104,12 @@ private fun PackageInstaller.SessionParams.applyInstallReasonAndPackageSource(
     }
 }
 
-private fun String.toUriOrNull(): Uri? =
-    runCatching { toUri() }
-        .getOrElse { error ->
-            Timber.w(error, "Failed to parse install metadata URI: $this")
-            null
-        }
-        ?.takeIf { !it.scheme.isNullOrBlank() }
+private fun String.toUriOrNull(): Uri? = runCatching { toUri() }
+    .getOrElse { error ->
+        Timber.w(error, "Failed to parse install metadata URI: $this")
+        null
+    }
+    ?.takeIf { !it.scheme.isNullOrBlank() }
 
 private fun List<InstallEntity>.totalInstallSize(): Long? {
     if (isEmpty()) return null
@@ -113,5 +118,4 @@ private fun List<InstallEntity>.totalInstallSize(): Long? {
     return sizes.sum()
 }
 
-private fun InstallMetadata.defaultPackageSource(): PackageSource =
-    if (referrerUri.isNullOrBlank()) PackageSource.LOCAL_FILE else PackageSource.DOWNLOADED_FILE
+private fun InstallMetadata.defaultPackageSource(): PackageSource = if (referrerUri.isNullOrBlank()) PackageSource.LOCAL_FILE else PackageSource.DOWNLOADED_FILE

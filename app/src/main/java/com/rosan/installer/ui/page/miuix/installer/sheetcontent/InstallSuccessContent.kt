@@ -28,6 +28,7 @@ import com.rosan.installer.domain.privileged.usecase.OpenAppUseCase
 import com.rosan.installer.domain.privileged.usecase.OpenAppUseCase.Companion.PRIVILEGED_START_TIMEOUT_MS
 import com.rosan.installer.domain.privileged.usecase.OpenLSPosedUseCase
 import com.rosan.installer.domain.settings.model.config.isPrivileged
+import com.rosan.installer.ui.page.main.installer.InstallerViewAction
 import com.rosan.installer.ui.page.main.installer.InstallerViewModel
 import com.rosan.installer.ui.page.miuix.installer.components.AppInfoSlot
 import com.rosan.installer.ui.page.miuix.installer.components.AppInfoState
@@ -35,6 +36,7 @@ import com.rosan.installer.ui.util.isGestureNavigation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
@@ -47,7 +49,7 @@ fun InstallSuccessContent(
     appInfo: AppInfoState,
     viewModel: InstallerViewModel,
     closeSessionCountDown: Int,
-    onClose: () -> Unit
+    onClose: () -> Unit,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -64,7 +66,7 @@ fun InstallSuccessContent(
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         AppInfoSlot(appInfo = appInfo)
 
@@ -74,7 +76,7 @@ fun InstallSuccessContent(
             text = stringResource(R.string.installer_install_success),
             style = MiuixTheme.textStyles.headline2,
             fontWeight = FontWeight.Bold,
-            color = MiuixTheme.colorScheme.primary
+            color = MiuixTheme.colorScheme.primary,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -89,16 +91,19 @@ fun InstallSuccessContent(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.textButtonColors(
                         color = if (isDynamicColor) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.secondaryVariant,
-                        textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant
+                        textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant,
                     ),
                     onClick = {
+                        viewModel.dispatch(InstallerViewAction.PrepareClose)
                         coroutineScope.launch(Dispatchers.IO) {
                             val success = openLSPosedUseCase(config)
                             if (success) {
-                                launch(Dispatchers.Main) { onClose() }
+                                withContext(Dispatchers.Main) {
+                                    viewModel.dispatch(InstallerViewAction.Close)
+                                }
                             }
                         }
-                    }
+                    },
                 )
             }
         }
@@ -109,40 +114,47 @@ fun InstallSuccessContent(
                 .navigationBarsPadding()
                 .padding(top = 24.dp, bottom = if (isGestureNavigation()) 24.dp else 0.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             val intent =
-                if (appInfo.packageName.isNotEmpty()) context.packageManager.getLaunchIntentForPackage(
-                    appInfo.packageName
-                ) else null
+                if (appInfo.packageName.isNotEmpty()) {
+                    context.packageManager.getLaunchIntentForPackage(
+                        appInfo.packageName,
+                    )
+                } else {
+                    null
+                }
             TextButton(
                 text = stringResource(R.string.finish),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColors(
                     color = if (isDynamicColor) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.secondaryVariant,
-                    textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant
+                    textColor = if (isDynamicColor) MiuixTheme.colorScheme.onSecondaryContainer else MiuixTheme.colorScheme.onSecondaryVariant,
                 ),
                 onClick = onClose,
             )
-            if (intent != null)
+            if (intent != null) {
                 TextButton(
                     text = stringResource(R.string.open),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                     onClick = {
+                        viewModel.dispatch(InstallerViewAction.PrepareClose)
                         coroutineScope.launch(Dispatchers.IO) {
                             val result = openAppUseCase(
                                 config = config,
-                                launchIntent = intent
+                                launchIntent = intent,
                             )
 
                             when (result) {
                                 is OpenAppUseCase.Result.SuccessPrivileged -> {
-                                    launch(Dispatchers.Main) { onClose() }
+                                    withContext(Dispatchers.Main) {
+                                        viewModel.dispatch(InstallerViewAction.Close)
+                                    }
                                 }
 
                                 is OpenAppUseCase.Result.FallbackRequired -> {
-                                    launch(Dispatchers.Main) {
+                                    withContext(Dispatchers.Main) {
                                         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
                                         if (!hasPrivilege) {
@@ -150,13 +162,14 @@ fun InstallSuccessContent(
                                         } else {
                                             delay(PRIVILEGED_START_TIMEOUT_MS)
                                         }
-                                        onClose()
+                                        viewModel.dispatch(InstallerViewAction.Close)
                                     }
                                 }
                             }
                         }
-                    }
+                    },
                 )
+            }
         }
     }
 }

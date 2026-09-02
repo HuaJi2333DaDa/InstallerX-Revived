@@ -6,8 +6,9 @@ import com.rosan.installer.domain.settings.model.config.Authorizer
 
 sealed interface HomePageViewAction {
     data object RefreshActivateStatus : HomePageViewAction
-    data class ChangeAutoLockInstaller(val autoLockInstaller: Boolean) : HomePageViewAction
     data class SetDefaultInstaller(val lock: Boolean) : HomePageViewAction
     data class ChangeAuthorizer(val authorizer: Authorizer) : HomePageViewAction
+    data class ChangeCustomizeAuthorizer(val customizeAuthorizer: String) : HomePageViewAction
+    data class EnableCustomizeAuthorizer(val customizeAuthorizer: String) : HomePageViewAction
     data class ChangeUserSetLSPosedActive(val active: Boolean) : HomePageViewAction
 }

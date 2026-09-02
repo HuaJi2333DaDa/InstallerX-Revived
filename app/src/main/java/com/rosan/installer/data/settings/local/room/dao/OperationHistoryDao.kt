@@ -4,6 +4,7 @@ package com.rosan.installer.data.settings.local.room.dao
 
 import androidx.room3.Dao
 import androidx.room3.Insert
+import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import com.rosan.installer.data.settings.local.room.entity.OperationHistoryEntity
 import kotlinx.coroutines.flow.Flow
@@ -19,8 +20,11 @@ interface OperationHistoryDao {
     @Query("select * from operation_history order by timestamp desc, id desc limit :limit")
     fun flowAll(limit: Int): Flow<List<OperationHistoryEntity>>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: OperationHistoryEntity): Long
+
+    @Query("delete from operation_history where id = :id")
+    suspend fun deleteById(id: Long)
 
     @Query(
         """
@@ -30,7 +34,7 @@ interface OperationHistoryDao {
             order by timestamp desc, id desc
             limit :limit
         )
-        """
+        """,
     )
     suspend fun trimToLimit(limit: Int)
 

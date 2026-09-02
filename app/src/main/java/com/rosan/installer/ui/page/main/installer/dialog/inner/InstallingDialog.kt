@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rosan.installer.R
+import com.rosan.installer.domain.engine.model.install.InstallPhase
 import com.rosan.installer.ui.page.main.installer.InstallerStage
 import com.rosan.installer.ui.page.main.installer.InstallerViewAction
 import com.rosan.installer.ui.page.main.installer.InstallerViewModel
@@ -31,9 +32,7 @@ import com.rosan.installer.ui.page.main.installer.dialog.dialogButtons
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun installingDialog(
-    viewModel: InstallerViewModel
-): DialogParams {
+fun installingDialog(viewModel: InstallerViewModel): DialogParams {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val stage = uiState.stage
 
@@ -42,45 +41,53 @@ fun installingDialog(
     // Call InstallInfoDialog for base structure (icon, title, subtitle with new version)
     val baseParams = installInfoDialog(
         viewModel = viewModel,
-        onTitleExtraClick = {}
+        onTitleExtraClick = {},
     )
 
     // Override text and buttons
     return baseParams.copy(
         text = DialogInnerParams(
-            DialogParamsType.InstallerInstalling.id
+            DialogParamsType.InstallerInstalling.id,
         ) {
             Column {
                 if (installingStage != null) {
-                    val displayLabel = installingStage.appLabel ?: "Unknown"
-
-                    val formattedText = if (installingStage.total > 1) {
+                    val statusText = if (installingStage.total > 1) {
                         stringResource(
                             R.string.installing_progress_text,
-                            displayLabel,
+                            installingStage.appLabel ?: "Unknown",
                             installingStage.current,
-                            installingStage.total
+                            installingStage.total,
                         )
-                    } else null
-
-                    formattedText?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp)
+                    } else {
+                        stringResource(
+                            when (installingStage.phase) {
+                                InstallPhase.WRITING -> R.string.installer_writing
+                                InstallPhase.INSTALLING -> R.string.installer_installing
+                            },
                         )
                     }
+
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                    )
                 }
                 // --- M3E ---
-                val currentProgress = installingStage?.progress
-                if (currentProgress != null && currentProgress > 0f) {
+                val determinateProgress = installingStage?.let { installing ->
+                    installing.progress.takeIf { progress ->
+                        progress > 0f &&
+                            (installing.total > 1 || installing.phase == InstallPhase.WRITING)
+                    }
+                }
+                if (determinateProgress != null) {
                     val animatedProgress by animateFloatAsState(
-                        targetValue = currentProgress,
+                        targetValue = determinateProgress,
                         animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
-                        label = "ProgressBarAnimation"
+                        label = "ProgressBarAnimation",
                     )
                     LinearWavyProgressIndicator(
                         progress = { animatedProgress },
@@ -89,10 +96,11 @@ fun installingDialog(
                             .height(8.dp),
                     )
                 } else {
-                    // other method have unspecified progress
+                    // A single install can keep running after all bytes have been staged. Show an
+                    // indeterminate indicator while PackageInstaller verifies and commits it.
                     LinearWavyProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
-                        amplitude = 0f // not wavy
+                        amplitude = 0f, // not wavy
                     )
                 }
             }
@@ -102,8 +110,8 @@ fun installingDialog(
             listOf(
                 DialogButton(stringResource(R.string.installer_move_to_background)) {
                     viewModel.dispatch(InstallerViewAction.Background)
-                }
+                },
             )
-        }
+        },
     )
 }

@@ -4,6 +4,8 @@ package com.rosan.installer.domain.engine.repository
 
 import com.rosan.installer.domain.engine.model.install.InstallEntity
 import com.rosan.installer.domain.engine.model.install.InstallMetadata
+import com.rosan.installer.domain.engine.model.install.InstallPhase
+import com.rosan.installer.domain.engine.model.install.InstallWriteProgress
 import com.rosan.installer.domain.settings.model.config.ConfigModel
 
 /**
@@ -25,6 +27,9 @@ interface AppInstallerRepository {
      * @param blacklist The list of blacklisted package names.
      * @param sharedUserIdBlacklist The list of blacklisted shared user IDs.
      * @param sharedUserIdExemption The list of package names for which shared user ID exemption is enabled.
+     * @param onProgress Reports aggregate APK bytes written when all selected source sizes are known.
+     * @param onPhaseChanged Reports whether sources are being written or the staged session is
+     * being processed by PackageInstaller.
      */
     suspend fun doInstallWork(
         config: ConfigModel,
@@ -33,7 +38,9 @@ interface AppInstallerRepository {
         respectPlatformInstallPolicy: Boolean = false,
         blacklist: List<String>,
         sharedUserIdBlacklist: List<String>,
-        sharedUserIdExemption: List<String>
+        sharedUserIdExemption: List<String>,
+        onProgress: suspend (InstallWriteProgress) -> Unit = {},
+        onPhaseChanged: suspend (InstallPhase) -> Unit = {},
     )
 
     /**
@@ -42,10 +49,7 @@ interface AppInstallerRepository {
      * @param config The configuration model.
      * @param packageName The name of the package to uninstall.
      */
-    suspend fun doUninstallWork(
-        config: ConfigModel,
-        packageName: String,
-    )
+    suspend fun doUninstallWork(config: ConfigModel, packageName: String)
 
     /**
      * Approve or deny a session.
@@ -54,9 +58,5 @@ interface AppInstallerRepository {
      * @param sessionId The ID of the session to approve or deny.
      * @param granted Whether the session should be granted or denied.
      */
-    suspend fun approveSession(
-        config: ConfigModel,
-        sessionId: Int,
-        granted: Boolean
-    )
+    suspend fun approveSession(config: ConfigModel, sessionId: Int, granted: Boolean)
 }

@@ -81,15 +81,13 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun InstallerGlobalSettingsPage(
-    useBlur: Boolean,
-    viewModel: InstallerSettingsViewModel = koinViewModel()
-) {
+fun InstallerGlobalSettingsPage(useBlur: Boolean, viewModel: InstallerSettingsViewModel = koinViewModel()) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
+    var isReordering by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         topAppBarState.heightOffset = topAppBarState.heightOffsetLimit
@@ -119,33 +117,35 @@ fun InstallerGlobalSettingsPage(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backdrop.getMaterial3AppBarColor(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    scrolledContainerColor = backdrop.getMaterial3AppBarColor()
-                )
+                    scrolledContainerColor = backdrop.getMaterial3AppBarColor(),
+                ),
             )
-        }
+        },
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
-            contentPadding = paddingValues
+            contentPadding = paddingValues,
+            userScrollEnabled = !isReordering,
         ) {
             // --- Group 1: Global Installer Settings ---
             item {
                 val biometricAvailable = remember {
                     BiometricManager.from(context)
-                        .canAuthenticate(BIOMETRIC_WEAK or BIOMETRIC_STRONG or DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS
+                        .canAuthenticate(BIOMETRIC_WEAK or BIOMETRIC_STRONG or DEVICE_CREDENTIAL) ==
+                        BiometricManager.BIOMETRIC_SUCCESS
                 }
 
                 SegmentedColumn(
-                    title = stringResource(R.string.installer_settings_global_installer)
+                    title = stringResource(R.string.installer_settings_global_installer),
                 ) {
                     item {
                         NavigationItemWidget(
                             icon = AppIcons.Dialog,
                             title = stringResource(R.string.dialog_settings),
                             description = stringResource(R.string.dialog_settings_desc),
-                            onClick = { navigator.push(Route.DialogSettings) }
+                            onClick = { navigator.push(Route.DialogSettings) },
                         )
                     }
 
@@ -154,7 +154,7 @@ fun InstallerGlobalSettingsPage(
                             icon = AppIcons.Notification,
                             title = stringResource(R.string.notification_settings),
                             description = stringResource(R.string.notification_settings_desc),
-                            onClick = { navigator.push(Route.NotificationSettings) }
+                            onClick = { navigator.push(Route.NotificationSettings) },
                         )
                     }
 
@@ -163,26 +163,27 @@ fun InstallerGlobalSettingsPage(
                             icon = AppIcons.Authorizer,
                             title = stringResource(R.string.authorizer_customization),
                             description = stringResource(R.string.authorizer_customization_desc),
-                            onClick = { navigator.push(Route.AuthorizerCust) }
+                            onClick = { navigator.push(Route.AuthorizerCust) },
                         )
                     }
 
-                    if (biometricAvailable) item {
-                        DataInstallerBiometricAuthWidget(
-                            currentMode = uiState.installerRequireBiometricAuth,
-                            onModeChange = {
-                                viewModel.dispatch(InstallerSettingsAction.ChangeBiometricAuth(it))
-                            }
-                        )
+                    if (biometricAvailable) {
+                        item {
+                            DataInstallerBiometricAuthWidget(
+                                currentMode = uiState.installerRequireBiometricAuth,
+                                onModeChange = {
+                                    viewModel.dispatch(InstallerSettingsAction.ChangeBiometricAuth(it))
+                                },
+                            )
+                        }
                     }
-
                 }
             }
 
             // --- Group 2: Signature Check ---
             item {
                 SegmentedColumn(
-                    title = stringResource(R.string.installer_settings_signature_check)
+                    title = stringResource(R.string.installer_settings_signature_check),
                 ) {
                     item {
                         SwitchWidget(
@@ -193,10 +194,24 @@ fun InstallerGlobalSettingsPage(
                             onCheckedChange = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.ChangeCheckAppSignature(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
-                            }
+                            },
+                        )
+                    }
+
+                    item(animatedVisibility = uiState.checkAppSignature) {
+                        SwitchWidget(
+                            icon = AppIcons.InstallAllowSigMismatch,
+                            title = stringResource(R.string.config_check_split_package_signatures),
+                            description = stringResource(R.string.config_check_split_package_signatures_desc),
+                            checked = uiState.checkSplitPackageSignatures,
+                            onCheckedChange = {
+                                viewModel.dispatch(
+                                    InstallerSettingsAction.ChangeCheckSplitPackageSignatures(it),
+                                )
+                            },
                         )
                     }
 
@@ -209,10 +224,10 @@ fun InstallerGlobalSettingsPage(
                             onCheckedChange = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.ChangeShowSignatureInfoOnMatch(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
 
@@ -225,10 +240,10 @@ fun InstallerGlobalSettingsPage(
                             onCheckedChange = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.ChangeShowSignatureDetails(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
                 }
@@ -237,7 +252,7 @@ fun InstallerGlobalSettingsPage(
             // --- Group 3: Xposed Detection ---
             item {
                 SegmentedColumn(
-                    title = stringResource(R.string.installer_settings_xposed_detection)
+                    title = stringResource(R.string.installer_settings_xposed_detection),
                 ) {
                     item {
                         SwitchWidget(
@@ -248,10 +263,10 @@ fun InstallerGlobalSettingsPage(
                             onCheckedChange = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.ChangeDetectXposedModule(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
 
@@ -264,20 +279,22 @@ fun InstallerGlobalSettingsPage(
                             onCheckedChange = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.ChangeQuickOpenLSPosed(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
                 }
             }
 
             // --- Group 4: OPPO Related ---
-            if (DeviceConfig.currentManufacturer == Manufacturer.OPPO || DeviceConfig.currentManufacturer == Manufacturer.ONEPLUS) {
+            if (DeviceConfig.currentManufacturer == Manufacturer.OPPO ||
+                DeviceConfig.currentManufacturer == Manufacturer.ONEPLUS
+            ) {
                 item {
                     SegmentedColumn(
-                        title = stringResource(R.string.installer_oppo_related)
+                        title = stringResource(R.string.installer_oppo_related),
                     ) {
                         item {
                             SwitchWidget(
@@ -288,10 +305,10 @@ fun InstallerGlobalSettingsPage(
                                 onCheckedChange = {
                                     viewModel.dispatch(
                                         InstallerSettingsAction.ChangeShowOPPOSpecial(
-                                            it
-                                        )
+                                            it,
+                                        ),
                                     )
-                                }
+                                },
                             )
                         }
                     }
@@ -303,7 +320,7 @@ fun InstallerGlobalSettingsPage(
                 SegmentedColumn(
                     modifier = Modifier.padding(top = 8.dp),
                     title = stringResource(id = R.string.config_managed_installer_packages_title),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp),
                 ) {
                     item {
                         ManagedPackagesWidget(
@@ -312,25 +329,26 @@ fun InstallerGlobalSettingsPage(
                             onAddPackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.AddManagedInstallerPackage(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onRemovePackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.RemoveManagedInstallerPackage(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onMovePackage = { fromIndex, toIndex ->
                                 viewModel.dispatch(
                                     InstallerSettingsAction.MoveManagedInstallerPackage(
                                         fromIndex,
-                                        toIndex
-                                    )
+                                        toIndex,
+                                    ),
                                 )
-                            }
+                            },
+                            onDragStateChange = { isReordering = it },
                         )
                     }
                 }
@@ -340,7 +358,7 @@ fun InstallerGlobalSettingsPage(
             item {
                 SegmentedColumn(
                     title = stringResource(id = R.string.config_managed_blacklist_by_package_name_title),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp),
                 ) {
                     item {
                         ManagedPackagesWidget(
@@ -349,25 +367,26 @@ fun InstallerGlobalSettingsPage(
                             onAddPackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.AddManagedBlacklistPackage(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onRemovePackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.RemoveManagedBlacklistPackage(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onMovePackage = { fromIndex, toIndex ->
                                 viewModel.dispatch(
                                     InstallerSettingsAction.MoveManagedBlacklistPackage(
                                         fromIndex,
-                                        toIndex
-                                    )
+                                        toIndex,
+                                    ),
                                 )
-                            }
+                            },
+                            onDragStateChange = { isReordering = it },
                         )
                     }
                 }
@@ -377,7 +396,7 @@ fun InstallerGlobalSettingsPage(
             item {
                 SegmentedColumn(
                     title = stringResource(R.string.config_managed_blacklist_by_shared_user_id_title),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp),
                 ) {
                     item {
                         ManagedUidsWidget(
@@ -386,25 +405,26 @@ fun InstallerGlobalSettingsPage(
                             onAddUid = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.AddManagedSharedUserIdBlacklist(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onRemoveUid = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.RemoveManagedSharedUserIdBlacklist(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onMoveUid = { from, to ->
                                 viewModel.dispatch(
                                     InstallerSettingsAction.MoveManagedSharedUserIdBlacklist(
                                         from,
-                                        to
-                                    )
+                                        to,
+                                    ),
                                 )
-                            }
+                            },
+                            onDragStateChange = { isReordering = it },
                         )
                     }
 
@@ -418,44 +438,41 @@ fun InstallerGlobalSettingsPage(
                             onAddPackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.AddManagedSharedUserIdExemptedPackages(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onRemovePackage = {
                                 viewModel.dispatch(
                                     InstallerSettingsAction.RemoveManagedSharedUserIdExemptedPackages(
-                                        it
-                                    )
+                                        it,
+                                    ),
                                 )
                             },
                             onMovePackage = { fromIndex, toIndex ->
                                 viewModel.dispatch(
                                     InstallerSettingsAction.MoveManagedSharedUserIdExemptedPackages(
                                         fromIndex,
-                                        toIndex
-                                    )
+                                        toIndex,
+                                    ),
                                 )
-                            }
+                            },
+                            onDragStateChange = { isReordering = it },
                         )
                     }
                 }
             }
-
         }
     }
 }
 
 @Composable
-private fun DataInstallerBiometricAuthWidget(
-    currentMode: BiometricAuthMode,
-    onModeChange: (BiometricAuthMode) -> Unit
-) {
+private fun DataInstallerBiometricAuthWidget(currentMode: BiometricAuthMode, onModeChange: (BiometricAuthMode) -> Unit) {
     val modes = remember {
         listOf(
             BiometricAuthMode.Disable,
             BiometricAuthMode.Enable,
-            BiometricAuthMode.FollowConfig
+            BiometricAuthMode.FollowConfig,
         )
     }
 
@@ -485,7 +502,7 @@ private fun DataInstallerBiometricAuthWidget(
             if (currentMode != selectedMode) {
                 onModeChange(selectedMode)
             }
-        }
+        },
     )
 }
 
@@ -499,7 +516,8 @@ private fun ManagedPackagesWidget(
     infoColor: Color = MaterialTheme.colorScheme.primary,
     onAddPackage: (NamedPackage) -> Unit,
     onRemovePackage: (NamedPackage) -> Unit,
-    onMovePackage: (fromIndex: Int, toIndex: Int) -> Unit
+    onMovePackage: (fromIndex: Int, toIndex: Int) -> Unit,
+    onDragStateChange: (Boolean) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<NamedPackage?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -512,13 +530,14 @@ private fun ManagedPackagesWidget(
         itemDescription = { it.packageName },
         leadingIcon = AppIcons.Android,
         onMove = onMovePackage,
+        onDragStateChange = onDragStateChange,
         noContentTitle = noContentTitle,
         trailingContent = { item ->
             IconButton(onClick = { deleteTarget = item }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = stringResource(R.string.delete),
-                    tint = MaterialTheme.colorScheme.error
+                    tint = MaterialTheme.colorScheme.error,
                 )
             }
         },
@@ -527,19 +546,19 @@ private fun ManagedPackagesWidget(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedVisibility(visible = isInfoVisible && !infoText.isNullOrBlank()) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(infoColor.copy(alpha = 0.1f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Text(
                             text = infoText ?: "",
                             color = infoColor,
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelMedium,
                         )
                     }
                 }
@@ -550,7 +569,7 @@ private fun ManagedPackagesWidget(
                     Text(stringResource(R.string.add))
                 }
             }
-        }
+        },
     )
 
     if (showAddDialog) {
@@ -559,7 +578,7 @@ private fun ManagedPackagesWidget(
             onConfirm = {
                 onAddPackage(it)
                 showAddDialog = false
-            }
+            },
         )
     }
 
@@ -570,7 +589,7 @@ private fun ManagedPackagesWidget(
             onConfirm = {
                 onRemovePackage(item)
                 deleteTarget = null
-            }
+            },
         )
     }
 }
@@ -582,7 +601,8 @@ private fun ManagedUidsWidget(
     uids: List<SharedUid>,
     onAddUid: (SharedUid) -> Unit,
     onRemoveUid: (SharedUid) -> Unit,
-    onMoveUid: (fromIndex: Int, toIndex: Int) -> Unit
+    onMoveUid: (fromIndex: Int, toIndex: Int) -> Unit,
+    onDragStateChange: (Boolean) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<SharedUid?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -595,13 +615,14 @@ private fun ManagedUidsWidget(
         itemDescription = { "UID: ${it.uidValue}" },
         leadingIcon = AppIcons.BugReport,
         onMove = onMoveUid,
+        onDragStateChange = onDragStateChange,
         noContentTitle = noContentTitle,
         trailingContent = { item ->
             IconButton(onClick = { deleteTarget = item }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = stringResource(R.string.delete),
-                    tint = MaterialTheme.colorScheme.error
+                    tint = MaterialTheme.colorScheme.error,
                 )
             }
         },
@@ -610,7 +631,7 @@ private fun ManagedUidsWidget(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = { showAddDialog = true }) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
@@ -618,7 +639,7 @@ private fun ManagedUidsWidget(
                     Text(stringResource(R.string.add))
                 }
             }
-        }
+        },
     )
 
     if (showAddDialog) {
@@ -627,7 +648,7 @@ private fun ManagedUidsWidget(
             onConfirm = { uid ->
                 onAddUid(uid)
                 showAddDialog = false
-            }
+            },
         )
     }
 
@@ -638,7 +659,7 @@ private fun ManagedUidsWidget(
             onConfirm = {
                 onRemoveUid(item)
                 deleteTarget = null
-            }
+            },
         )
     }
 }
@@ -647,10 +668,7 @@ private fun ManagedUidsWidget(
  * An AlertDialog for adding a new NamedPackage.
  */
 @Composable
-private fun AddPackageDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (NamedPackage) -> Unit
-) {
+private fun AddPackageDialog(onDismiss: () -> Unit, onConfirm: (NamedPackage) -> Unit) {
     var name by remember { mutableStateOf("") }
     var packageName by remember { mutableStateOf("") }
     val isConfirmEnabled = name.isNotBlank() && packageName.isNotBlank()
@@ -664,20 +682,20 @@ private fun AddPackageDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.config_name)) },
-                    singleLine = true
+                    singleLine = true,
                 )
                 OutlinedTextField(
                     value = packageName,
                     onValueChange = { packageName = it },
                     label = { Text(stringResource(R.string.config_package_name)) },
-                    singleLine = true
+                    singleLine = true,
                 )
             }
         },
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(NamedPackage(name, packageName)) },
-                enabled = isConfirmEnabled
+                enabled = isConfirmEnabled,
             ) {
                 Text(stringResource(R.string.confirm))
             }
@@ -686,7 +704,7 @@ private fun AddPackageDialog(
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
             }
-        }
+        },
     )
 }
 
@@ -694,10 +712,7 @@ private fun AddPackageDialog(
  * An AlertDialog for adding a new SharedUid.
  */
 @Composable
-private fun AddUidDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (SharedUid) -> Unit
-) {
+private fun AddUidDialog(onDismiss: () -> Unit, onConfirm: (SharedUid) -> Unit) {
     var uidName by remember { mutableStateOf("") }
     var uidValueString by remember { mutableStateOf("") }
 
@@ -713,7 +728,7 @@ private fun AddUidDialog(
                     value = uidName,
                     onValueChange = { uidName = it },
                     label = { Text(stringResource(R.string.config_shared_uid_name)) }, // "Shared UID 名称"
-                    singleLine = true
+                    singleLine = true,
                 )
                 OutlinedTextField(
                     value = uidValueString,
@@ -721,7 +736,7 @@ private fun AddUidDialog(
                     label = { Text(stringResource(R.string.config_shared_uid_value)) }, // "Shared UID 值"
                     singleLine = true,
                     // Set the keyboard type to Number
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
             }
         },
@@ -732,7 +747,7 @@ private fun AddUidDialog(
                     val uidValue = uidValueString.toInt()
                     onConfirm(SharedUid(uidName, uidValue))
                 },
-                enabled = isConfirmEnabled
+                enabled = isConfirmEnabled,
             ) {
                 Text(stringResource(R.string.confirm))
             }
@@ -741,7 +756,7 @@ private fun AddUidDialog(
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
             }
-        }
+        },
     )
 }
 
@@ -749,11 +764,7 @@ private fun AddUidDialog(
  * An AlertDialog to confirm the deletion of an pkg.
  */
 @Composable
-private fun DeleteNamedPackageConfirmationDialog(
-    item: NamedPackage,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
+private fun DeleteNamedPackageConfirmationDialog(item: NamedPackage, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.config_confirm_deletion)) },
@@ -767,7 +778,7 @@ private fun DeleteNamedPackageConfirmationDialog(
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
             }
-        }
+        },
     )
 }
 
@@ -775,11 +786,7 @@ private fun DeleteNamedPackageConfirmationDialog(
  * An AlertDialog to confirm the deletion of an pkg.
  */
 @Composable
-private fun DeleteSharedUidConfirmationDialog(
-    item: SharedUid,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
+private fun DeleteSharedUidConfirmationDialog(item: SharedUid, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.config_confirm_deletion)) },
@@ -793,6 +800,6 @@ private fun DeleteSharedUidConfirmationDialog(
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
             }
-        }
+        },
     )
 }

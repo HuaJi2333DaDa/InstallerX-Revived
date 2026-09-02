@@ -21,11 +21,15 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,6 +41,7 @@ import com.rosan.installer.ui.navigation.LocalNavigator
 import com.rosan.installer.ui.page.main.settings.home.HomePageViewAction
 import com.rosan.installer.ui.page.main.settings.home.HomePageViewModel
 import com.rosan.installer.ui.page.main.widget.card.TitleTipCard
+import com.rosan.installer.ui.page.main.widget.dialog.CustomAuthorizerDialog
 import com.rosan.installer.ui.page.main.widget.setting.ExpressiveBackButton
 import com.rosan.installer.ui.page.main.widget.setting.RadioButtonWidget
 import com.rosan.installer.ui.page.main.widget.setting.SegmentedColumn
@@ -49,17 +54,38 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun PrivPage(
-    useBlur: Boolean,
-    viewModel: HomePageViewModel = koinViewModel()
-) {
+fun PrivPage(useBlur: Boolean, viewModel: HomePageViewModel = koinViewModel()) {
     val navigator = LocalNavigator.current
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
+    var showCustomizeAuthorizerDialog by remember { mutableStateOf(false) }
+    var selectCustomizeOnConfirm by remember { mutableStateOf(false) }
 
     OnLifecycleEvent(event = Lifecycle.Event.ON_RESUME) {
         viewModel.dispatch(HomePageViewAction.RefreshActivateStatus)
+    }
+
+    if (showCustomizeAuthorizerDialog) {
+        CustomAuthorizerDialog(
+            initialAuthorizer = uiState.customizeAuthorizer,
+            onDismiss = {
+                showCustomizeAuthorizerDialog = false
+                selectCustomizeOnConfirm = false
+            },
+            onConfirm = { authorizer ->
+                val customizeAuthorizer = authorizer.trim()
+                if (customizeAuthorizer.isBlank()) return@CustomAuthorizerDialog
+
+                showCustomizeAuthorizerDialog = false
+                if (selectCustomizeOnConfirm) {
+                    viewModel.dispatch(HomePageViewAction.EnableCustomizeAuthorizer(customizeAuthorizer))
+                } else {
+                    viewModel.dispatch(HomePageViewAction.ChangeCustomizeAuthorizer(customizeAuthorizer))
+                }
+                selectCustomizeOnConfirm = false
+            },
+        )
     }
 
     val backdrop = rememberMaterial3BlurBackdrop(useBlur)
@@ -86,16 +112,16 @@ fun PrivPage(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backdrop.getMaterial3AppBarColor(),
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    scrolledContainerColor = backdrop.getMaterial3AppBarColor()
-                )
+                    scrolledContainerColor = backdrop.getMaterial3AppBarColor(),
+                ),
             )
-        }
+        },
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .then(backdrop?.let { Modifier.layerBackdrop(it) } ?: Modifier),
-            contentPadding = paddingValues
+            contentPadding = paddingValues,
         ) {
             item {
                 SegmentedColumn {
@@ -103,19 +129,27 @@ fun PrivPage(
                         val selected = uiState.globalAuthorizer == Authorizer.None
                         RadioButtonWidget(
                             icon = AppIcons.None,
-                            title = if (uiState.isSystemApp) stringResource(R.string.working_status_system_installer) else stringResource(
-                                R.string.config_authorizer_none
-                            ),
-                            description = if (uiState.isSystemApp) stringResource(R.string.working_status_system_installer_desc)
-                            else stringResource(R.string.working_status_none_authorizer_desc),
+                            title = if (uiState.isSystemApp) {
+                                stringResource(R.string.working_status_system_installer)
+                            } else {
+                                stringResource(
+                                    R.string.config_authorizer_none,
+                                )
+                            },
+                            description = when {
+                                !uiState.isSessionInstallSupported -> stringResource(R.string.unavailable)
+                                uiState.isSystemApp -> stringResource(R.string.working_status_system_installer_desc)
+                                else -> stringResource(R.string.working_status_none_authorizer_desc)
+                            },
                             selected = selected,
+                            enabled = uiState.isSessionInstallSupported,
                             onClick = {
                                 viewModel.dispatch(
                                     HomePageViewAction.ChangeAuthorizer(
-                                        Authorizer.None
-                                    )
+                                        Authorizer.None,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
                     item {
@@ -124,16 +158,19 @@ fun PrivPage(
                         RadioButtonWidget(
                             icon = AppIcons.Root,
                             title = stringResource(R.string.config_authorizer_root),
-                            description = if (isAvailable) stringResource(R.string.available) + " (${uiState.rootMode.name})"
-                            else stringResource(R.string.unavailable),
+                            description = if (isAvailable) {
+                                stringResource(R.string.available) + " (${uiState.rootMode.name})"
+                            } else {
+                                stringResource(R.string.unavailable)
+                            },
                             selected = selected,
                             onClick = {
                                 viewModel.dispatch(
                                     HomePageViewAction.ChangeAuthorizer(
-                                        Authorizer.Root
-                                    )
+                                        Authorizer.Root,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
                     item {
@@ -150,10 +187,10 @@ fun PrivPage(
                             onClick = {
                                 viewModel.dispatch(
                                     HomePageViewAction.ChangeAuthorizer(
-                                        Authorizer.Shizuku
-                                    )
+                                        Authorizer.Shizuku,
+                                    ),
                                 )
-                            }
+                            },
                         )
                     }
                     item {
@@ -170,10 +207,44 @@ fun PrivPage(
                             onClick = {
                                 viewModel.dispatch(
                                     HomePageViewAction.ChangeAuthorizer(
-                                        Authorizer.Dhizuku
-                                    )
+                                        Authorizer.Dhizuku,
+                                    ),
                                 )
-                            }
+                            },
+                        )
+                    }
+                    item {
+                        val selected = uiState.globalAuthorizer == Authorizer.Customize
+                        val customizeAuthorizer = uiState.customizeAuthorizer
+                        RadioButtonWidget(
+                            icon = AppIcons.Terminal,
+                            title = stringResource(R.string.config_authorizer_customize),
+                            description = customizeAuthorizer.ifBlank {
+                                stringResource(R.string.config_authorizer_customize)
+                            },
+                            descriptionStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = if (customizeAuthorizer.isBlank()) {
+                                    null
+                                } else {
+                                    FontFamily.Monospace
+                                },
+                            ),
+                            selected = selected,
+                            onClick = {
+                                if (selected) {
+                                    selectCustomizeOnConfirm = false
+                                    showCustomizeAuthorizerDialog = true
+                                } else if (customizeAuthorizer.isBlank()) {
+                                    selectCustomizeOnConfirm = true
+                                    showCustomizeAuthorizerDialog = true
+                                } else {
+                                    viewModel.dispatch(
+                                        HomePageViewAction.ChangeAuthorizer(
+                                            Authorizer.Customize,
+                                        ),
+                                    )
+                                }
+                            },
                         )
                     }
                 }
@@ -181,13 +252,13 @@ fun PrivPage(
             item {
                 TitleTipCard(
                     title = stringResource(R.string.priv_page_what_is_this_title),
-                    text = stringResource(R.string.priv_page_what_is_this_desc)
+                    text = stringResource(R.string.priv_page_what_is_this_desc),
                 )
             }
             item {
                 TitleTipCard(
                     title = stringResource(R.string.priv_page_notice_title),
-                    text = stringResource(R.string.priv_page_notice_desc)
+                    text = stringResource(R.string.priv_page_notice_desc),
                 )
             }
         }

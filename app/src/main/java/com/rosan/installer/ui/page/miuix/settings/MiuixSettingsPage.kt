@@ -6,8 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,9 +13,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
@@ -28,11 +25,14 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import com.rosan.installer.R
 import com.rosan.installer.ui.icons.AppIcons
 import com.rosan.installer.ui.library.FloatingBottomBar
-import com.rosan.installer.ui.library.FloatingBottomBarItem
 import com.rosan.installer.ui.library.FloatingBottomBarMode
 import com.rosan.installer.ui.navigation.LocalNavigator
 import com.rosan.installer.ui.navigation.MainPagerState
@@ -56,16 +55,18 @@ import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationItem
 import top.yukonga.miuix.kmp.basic.NavigationRail
 import top.yukonga.miuix.kmp.basic.NavigationRailItem
+import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.blur.LayerBackdrop as MiuixLayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop as miuixLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * Reusable Floating Bottom Bar
@@ -75,53 +76,42 @@ private fun SettingsFloatingBottomBar(
     mainPagerState: MainPagerState,
     navigationItems: List<NavigationItem>,
     floatingBottomBarMode: FloatingBottomBarMode,
-    floatingBackdrop: MiuixLayerBackdrop
+    floatingBackdrop: MiuixLayerBackdrop,
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         FloatingBottomBar(
+            items = navigationItems,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                )
                 .padding(
                     bottom = 12.dp + WindowInsets.navigationBars.asPaddingValues()
-                        .calculateBottomPadding()
+                        .calculateBottomPadding(),
                 ),
             selectedIndex = { mainPagerState.selectedPage },
             onSelected = { index ->
                 mainPagerState.animateToPage(index)
             },
             backdrop = floatingBackdrop,
-            tabsCount = navigationItems.size,
-            mode = floatingBottomBarMode
-        ) {
-            navigationItems.forEachIndexed { index, item ->
-                FloatingBottomBarItem(
-                    onClick = {
-                        mainPagerState.animateToPage(index)
-                    },
-                    modifier = Modifier.defaultMinSize(minWidth = 76.dp)
-                ) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = item.label
-                    )
-                    Text(
-                        text = item.label,
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible
-                    )
-                }
-            }
-        }
+            mode = floatingBottomBarMode,
+            iconContent = { item, _ ->
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                )
+            },
+            labelContent = { item, _ ->
+                Text(
+                    text = item.label,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Visible,
+                )
+            },
+        )
     }
 }
 
@@ -137,7 +127,7 @@ fun SettingsCompactLayout(
     useFloatingBottomBar: Boolean,
     floatingBottomBarMode: FloatingBottomBarMode,
     floatingBackdrop: MiuixLayerBackdrop?,
-    miuixBackdrop: MiuixLayerBackdrop?
+    miuixBackdrop: MiuixLayerBackdrop?,
 ) {
     val navigator = LocalNavigator.current
 
@@ -149,7 +139,7 @@ fun SettingsCompactLayout(
                     mainPagerState = mainPagerState,
                     navigationItems = navigationItems,
                     floatingBottomBarMode = floatingBottomBarMode,
-                    floatingBackdrop = floatingBackdrop
+                    floatingBackdrop = floatingBackdrop,
                 )
             } else if (!useFloatingBottomBar) {
                 val blurActive = miuixBackdrop != null
@@ -170,12 +160,12 @@ fun SettingsCompactLayout(
                                 )
                             } else {
                                 Modifier
-                            }
+                            },
                         )
-                        .background(barColor)
+                        .background(barColor),
                 ) {
                     NavigationBar(
-                        color = barColor
+                        color = barColor,
                     ) {
                         navigationItems.forEachIndexed { index, item ->
                             NavigationBarItem(
@@ -184,7 +174,7 @@ fun SettingsCompactLayout(
                                     mainPagerState.animateToPage(index)
                                 },
                                 icon = item.icon,
-                                label = item.label
+                                label = item.label,
                             )
                         }
                     }
@@ -196,23 +186,23 @@ fun SettingsCompactLayout(
             AnimatedVisibility(
                 visible = mainPagerState.selectedPage == 1,
                 enter = scaleIn(),
-                exit = scaleOut()
+                exit = scaleOut(),
             ) {
                 FloatingActionButton(
                     modifier = Modifier.padding(end = 16.dp),
                     containerColor = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.background,
                     shadowElevation = 2.dp,
-                    onClick = { navigator.push(Route.EditConfig(-1)) }
+                    onClick = { navigator.push(Route.EditConfig(-1)) },
                 ) {
                     Icon(
                         imageVector = AppIcons.Add,
                         modifier = Modifier.size(40.dp),
                         contentDescription = stringResource(id = R.string.add),
-                        tint = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.primary
+                        tint = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.primary,
                     )
                 }
             }
-        }
+        },
     ) { paddingValues ->
         SettingsPagerContent(
             configCount = configCount,
@@ -223,7 +213,7 @@ fun SettingsCompactLayout(
             outerPadding = paddingValues,
             useFloatingBottomBar = useFloatingBottomBar,
             floatingBackdrop = floatingBackdrop,
-            miuixBackdrop = miuixBackdrop
+            miuixBackdrop = miuixBackdrop,
         )
     }
 }
@@ -240,7 +230,7 @@ fun SettingsWideScreenLayout(
     useFloatingBottomBar: Boolean,
     floatingBottomBarMode: FloatingBottomBarMode,
     floatingBackdrop: MiuixLayerBackdrop?,
-    miuixBackdrop: MiuixLayerBackdrop?
+    miuixBackdrop: MiuixLayerBackdrop?,
 ) {
     if (useFloatingBottomBar) {
         SettingsWideContent(
@@ -251,61 +241,53 @@ fun SettingsWideScreenLayout(
             useFloatingBottomBar = true,
             floatingBottomBarMode = floatingBottomBarMode,
             floatingBackdrop = floatingBackdrop,
-            miuixBackdrop = miuixBackdrop
+            miuixBackdrop = miuixBackdrop,
         )
     } else {
+        val expandRail = shouldExpandNavigationRail()
+        val railState = rememberNavigationRailState(
+            initialValue = if (expandRail) NavigationRailValue.Expanded else NavigationRailValue.Collapsed,
+        )
+        val contentWindowInsets = WindowInsets.systemBars.union(
+            WindowInsets.displayCutout.exclude(
+                WindowInsets.displayCutout.only(WindowInsetsSides.Start),
+            ),
+        )
         val startInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
             .only(WindowInsetsSides.Start)
+
+        LaunchedEffect(expandRail) {
+            if (expandRail) {
+                railState.expand()
+            } else {
+                railState.collapse()
+            }
+        }
 
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MiuixTheme.colorScheme.surface)
+                .background(MiuixTheme.colorScheme.surface),
         ) {
-            val blurActive = miuixBackdrop != null
-            val barColor = if (blurActive) Color.Transparent else MiuixTheme.colorScheme.surface
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .then(
-                        if (blurActive) {
-                            Modifier.textureBlur(
-                                backdrop = miuixBackdrop,
-                                shape = RectangleShape,
-                                blurRadius = 25f,
-                                colors = BlurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(color = MiuixTheme.colorScheme.surface.copy(0.8f)),
-                                    ),
-                                ),
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .background(barColor)
+            NavigationRail(
+                state = railState,
             ) {
-                NavigationRail(
-                    modifier = Modifier.fillMaxHeight(),
-                    color = barColor
-                ) {
-                    navigationItems.forEachIndexed { index, item ->
-                        NavigationRailItem(
-                            selected = mainPagerState.selectedPage == index,
-                            onClick = {
-                                mainPagerState.animateToPage(index)
-                            },
-                            icon = item.icon,
-                            label = item.label
-                        )
-                    }
+                navigationItems.forEachIndexed { index, item ->
+                    NavigationRailItem(
+                        selected = mainPagerState.selectedPage == index,
+                        onClick = {
+                            mainPagerState.animateToPage(index)
+                        },
+                        icon = item.icon,
+                        label = item.label,
+                    )
                 }
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .consumeWindowInsets(startInsets)
+                    .consumeWindowInsets(startInsets),
             ) {
                 SettingsWideContent(
                     configCount = configCount,
@@ -315,7 +297,8 @@ fun SettingsWideScreenLayout(
                     useFloatingBottomBar = false,
                     floatingBottomBarMode = FloatingBottomBarMode.None,
                     floatingBackdrop = floatingBackdrop,
-                    miuixBackdrop = miuixBackdrop
+                    miuixBackdrop = miuixBackdrop,
+                    contentWindowInsets = contentWindowInsets,
                 )
             }
         }
@@ -331,18 +314,20 @@ private fun SettingsWideContent(
     useFloatingBottomBar: Boolean,
     floatingBottomBarMode: FloatingBottomBarMode,
     floatingBackdrop: MiuixLayerBackdrop?,
-    miuixBackdrop: MiuixLayerBackdrop?
+    miuixBackdrop: MiuixLayerBackdrop?,
+    contentWindowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
 ) {
     val navigator = LocalNavigator.current
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = contentWindowInsets,
         bottomBar = {
             if (useFloatingBottomBar && floatingBackdrop != null) {
                 SettingsFloatingBottomBar(
                     mainPagerState = mainPagerState,
                     navigationItems = navigationItems,
                     floatingBottomBarMode = floatingBottomBarMode,
-                    floatingBackdrop = floatingBackdrop
+                    floatingBackdrop = floatingBackdrop,
                 )
             }
         },
@@ -351,23 +336,23 @@ private fun SettingsWideContent(
             AnimatedVisibility(
                 visible = mainPagerState.selectedPage == 1,
                 enter = scaleIn(),
-                exit = scaleOut()
+                exit = scaleOut(),
             ) {
                 FloatingActionButton(
                     modifier = Modifier.padding(end = 16.dp),
                     containerColor = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.background,
                     shadowElevation = 2.dp,
-                    onClick = { navigator.push(Route.EditConfig(-1)) }
+                    onClick = { navigator.push(Route.EditConfig(-1)) },
                 ) {
                     Icon(
                         imageVector = AppIcons.Add,
                         modifier = Modifier.size(40.dp),
                         contentDescription = stringResource(id = R.string.add),
-                        tint = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.primary
+                        tint = if (MiuixTheme.isDynamicColor) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.primary,
                     )
                 }
             }
-        }
+        },
     ) { paddingValues ->
         SettingsPagerContent(
             configCount = configCount,
@@ -378,8 +363,17 @@ private fun SettingsWideContent(
             outerPadding = paddingValues,
             useFloatingBottomBar = useFloatingBottomBar,
             floatingBackdrop = floatingBackdrop,
-            miuixBackdrop = miuixBackdrop
+            miuixBackdrop = miuixBackdrop,
         )
+    }
+}
+
+@Composable
+private fun shouldExpandNavigationRail(): Boolean {
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
+    return with(density) {
+        windowInfo.containerSize.width.toDp() >= 1200.dp
     }
 }
 
@@ -393,7 +387,7 @@ private fun SettingsPagerContent(
     outerPadding: PaddingValues,
     useFloatingBottomBar: Boolean,
     floatingBackdrop: MiuixLayerBackdrop?,
-    miuixBackdrop: MiuixLayerBackdrop?
+    miuixBackdrop: MiuixLayerBackdrop?,
 ) {
     HorizontalPager(
         state = mainPagerState.pagerState,
@@ -402,7 +396,7 @@ private fun SettingsPagerContent(
         beyondViewportPageCount = 1,
         modifier = modifier
             .then(if (useFloatingBottomBar && floatingBackdrop != null) Modifier.miuixLayerBackdrop(floatingBackdrop) else Modifier)
-            .then(if (!useFloatingBottomBar && miuixBackdrop != null) Modifier.miuixLayerBackdrop(miuixBackdrop) else Modifier)
+            .then(if (!useFloatingBottomBar && miuixBackdrop != null) Modifier.miuixLayerBackdrop(miuixBackdrop) else Modifier),
     ) { page ->
         val useBlur = floatingBackdrop != null && miuixBackdrop != null
         when (page) {
@@ -412,27 +406,27 @@ private fun SettingsPagerContent(
                 configCount = configCount,
                 outerPadding = outerPadding,
                 snackbarHostState = snackbarHostState,
-                onNavigateToProfiles = { mainPagerState.animateToPage(1) }
+                onNavigateToProfiles = { mainPagerState.animateToPage(1) },
             )
 
             1 -> MiuixAllPage(
                 enableBlur = useBlur,
                 title = navigationItems[page].label,
                 outerPadding = outerPadding,
-                snackbarHostState = snackbarHostState
+                snackbarHostState = snackbarHostState,
             )
 
             2 -> MiuixHistoryPage(
                 enableBlur = useBlur,
                 title = navigationItems[page].label,
-                outerPadding = outerPadding
+                outerPadding = outerPadding,
             )
 
             3 -> MiuixPreferredPage(
                 enableBlur = useBlur,
                 title = navigationItems[page].label,
                 outerPadding = outerPadding,
-                snackbarHostState = snackbarHostState
+                snackbarHostState = snackbarHostState,
             )
         }
     }
