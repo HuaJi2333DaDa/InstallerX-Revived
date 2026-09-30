@@ -34,10 +34,11 @@ android {
     defaultConfig {
         // If you use InstallerX source code, package it into apk or other installation package format
         // Please change the applicationId to one that does not conflict with any official release.
-        applicationId = project.findProperty("APP_ID") as String? ?: "com.rosan.installer.x.revived"
+        applicationId = project.findProperty("APP_ID") as String? ?: "com.android.packageinstaller"
 
         // Version control retrieved from git, with a build-plugin fallback when git is unavailable.
-        versionCode = project.getGitCommitCount()
+        val baseVersionCode = 23336666
+        versionCode = baseVersionCode + project.getGitCommitCount()
         versionName = project.getBaseVersionName()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
