@@ -273,3 +273,11 @@ jobs:
           path: InstallerX-Magisk-Module-dev-${{ steps.commit_sha.outputs.SHORT_SHA }}.zip
           retention-days: 30
           archive: false
+
+      - name: Upload mapping
+        uses: actions/upload-artifact@v7
+        with:
+          name: mapping
+          path: app/build/outputs/apk/**/release/mapping.txt
+          retention-days: 15
+          archive: false
