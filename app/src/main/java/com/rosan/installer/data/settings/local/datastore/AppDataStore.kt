@@ -133,6 +133,8 @@ class AppDataStore(private val dataStore: DataStore<Preferences>, private val js
             register(booleanPreferencesKey("show_oppo_special"), PreferenceValueType.BOOLEAN)
         val CHECK_APP_SIGNATURE =
             register(booleanPreferencesKey("check_app_signature"), PreferenceValueType.BOOLEAN)
+        val CHECK_SOURCE_STAMP =
+            register(booleanPreferencesKey("check_source_stamp"), PreferenceValueType.BOOLEAN)
         val CHECK_SPLIT_PACKAGE_SIGNATURES =
             register(booleanPreferencesKey("check_split_package_signatures"), PreferenceValueType.BOOLEAN)
         val SHOW_SIGNATURE_INFO_ON_MATCH =
@@ -183,6 +185,10 @@ class AppDataStore(private val dataStore: DataStore<Preferences>, private val js
             register(booleanPreferencesKey("lab_install_without_user_action"), PreferenceValueType.BOOLEAN)
         val LAB_RESPECT_PLATFORM_INSTALL_POLICY =
             register(booleanPreferencesKey("lab_respect_platform_install_policy"), PreferenceValueType.BOOLEAN)
+        val LAB_ENABLE_ABI_OVERRIDE =
+            register(booleanPreferencesKey("lab_enable_abi_override"), PreferenceValueType.BOOLEAN)
+        val LAB_TRY_DIFFERENT_ARCHITECTURE =
+            register(booleanPreferencesKey("lab_try_different_architecture"), PreferenceValueType.BOOLEAN)
 
         // Network
         val ALLOW_INTERNET_ACCESS = register(booleanPreferencesKey("allow_internet_access"), PreferenceValueType.BOOLEAN)
