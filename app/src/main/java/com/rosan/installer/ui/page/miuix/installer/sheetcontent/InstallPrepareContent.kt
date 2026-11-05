@@ -88,7 +88,7 @@ fun InstallPrepareContent(
     appInfo: AppInfoState,
     onCancel: () -> Unit,
     onInstall: () -> Unit,
-    onLongInstall: () -> Unit,
+    onLongInstall: (() -> Unit)?,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -149,6 +149,8 @@ fun InstallPrepareContent(
     val tagSignatureMatch = stringResource(R.string.tag_signature_match)
     val tagSignatureRotation = stringResource(R.string.tag_signature_rotation)
     val tagSignatureRotationUnconfirmed = stringResource(R.string.tag_signature_rotation_unconfirmed)
+    val tagAospSignature = stringResource(R.string.tag_aosp_signature)
+    val textAospSignature = stringResource(R.string.installer_prepare_aosp_signature)
     val sigNewInstall = stringResource(R.string.installer_prepare_signature_new_install)
     val sigMatch = stringResource(R.string.installer_prepare_signature_match)
     val sigRotationCompatible = stringResource(R.string.installer_prepare_signature_rotation_compatible)
@@ -214,7 +216,7 @@ fun InstallPrepareContent(
     val labelSignatureHybridClassical = stringResource(R.string.installer_signature_hybrid_classical)
     val labelSignatureHybridPqc = stringResource(R.string.installer_signature_hybrid_pqc)
 
-    val installResources = remember(errorColor, primaryColor) {
+    val installResources = remember(errorColor, primaryColor, tagAospSignature, textAospSignature) {
         InstallNoticeResources(
             tagDowngrade = tagDowngrade,
             textDowngrade = downgradeWarning,
@@ -222,6 +224,8 @@ fun InstallPrepareContent(
             tagSignatureMatch = tagSignatureMatch,
             tagSignatureRotation = tagSignatureRotation,
             tagSignatureRotationUnconfirmed = tagSignatureRotationUnconfirmed,
+            tagAospSignature = tagAospSignature,
+            textAospSignature = textAospSignature,
             textSigNewInstall = sigNewInstall,
             textSigMatch = sigMatch,
             textSigRotationCompatible = sigRotationCompatible,
@@ -677,11 +681,13 @@ fun InstallPrepareContent(
                     hasLongPressed = false
                     // Wait for the system's default long press duration
                     delay(viewConfiguration.longPressTimeoutMillis.milliseconds)
-                    hasLongPressed = true
-                    // Perform haptic feedback immediately before the action
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    // Trigger the long press action
-                    onLongInstall()
+                    onLongInstall?.let { action ->
+                        hasLongPressed = true
+                        // Perform haptic feedback immediately before the action
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        // Trigger the long press action
+                        action()
+                    }
                 }
             }
 
@@ -718,6 +724,7 @@ fun InstallPrepareContent(
                     onClick = {
                         // Only trigger normal install if long press didn't happen
                         if (!hasLongPressed) onInstall()
+                        hasLongPressed = false
                     },
                     enabled = canInstall,
                     text = stringResource(buttonTextId),
